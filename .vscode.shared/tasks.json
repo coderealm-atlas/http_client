@@ -1,0 +1,36 @@
+{
+    // See https://go.microsoft.com/fwlink/?LinkId=733558
+    // for the documentation about the tasks.json format
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "Quartz npx nodemon -L --watch content/ --ext md  --exec 'npx quartz build --serve'",
+            "type": "shell",
+            "command": "cd ../quartz; npx nodemon -L --watch content/ --ext md  --exec 'npx quartz build --serve'",
+            "options": {
+                "shell": {
+                    "executable": "/bin/bash",
+                    "args": [
+                        "-l", // This ensures that the shell is login shell, which sources your shell configuration (e.g., .bashrc)
+                        "-c",
+                        // "source $HOME/.nvm/nvm.sh && nvm use --lts && npm run serve" // Replace '14' with the version you want
+                        "cd ../quartz && source $HOME/.nvm/nvm.sh && nvm use --lts && npx nodemon -L --watch content/ --ext md --exec 'npx quartz build --serve'"
+                    ]
+                }
+            },
+            "presentation": {
+                "panel": "new"
+            },
+            "problemMatcher": []
+        },
+        {
+            "label": "Bbserver debug start",
+            "type": "shell",
+            "command": "./build/bbserver/bbserver_debug -c gtest/server_config_debug_local.json",
+            "presentation": {
+                "panel": "new"
+            },
+            "problemMatcher": []
+        }
+    ]
+}

@@ -1,0 +1,53 @@
+{
+  "name": "bbserver",
+  "version-string": "latest",
+  "dependencies": [
+    "benchmark",
+    "fmt",
+    "gtest",
+    "bde",
+    "croncpp",
+    "boost-json",
+    "date",
+    "openssl",
+    "boost-uuid",
+    "boost-url",
+    "boost-beast",
+    "boost-process",
+    "boost-iostreams",
+    "boost-redis",
+    "boost-mysql",
+    "boost-interprocess",
+    "boost-program-options",
+    "boost-log",
+    "tinyxml2",
+    "cmark",
+    {
+      "name": "boost-asio",
+      "features": [
+        "ssl"
+      ]
+    },
+    {
+      "name": "ryml"
+    },
+    {
+      "name": "rocksdb",
+      "features": [
+        "zstd"
+      ]
+    },
+    {
+      "name": "protobuf",
+      "features": [
+        "zlib"
+      ]
+    },
+    "minizip-ng",
+    "libgit2",
+    "libsodium",
+    "sqlite-modern-cpp",
+    "sqlite3",
+    "zstd"
+  ]
+}

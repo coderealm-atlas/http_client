@@ -1,0 +1,25 @@
+{
+  "name": "http-client",
+  "version-string": "latest",
+  "dependencies": [
+    "benchmark",
+    "fmt",
+    "gtest",
+    "boost-json",
+    "date",
+    "openssl",
+    "boost-uuid",
+    "boost-url",
+    "boost-beast",
+    "boost-process",
+    "boost-iostreams",
+    "boost-log",
+    {
+      "name": "boost-asio",
+      "features": [
+        "ssl"
+      ]
+    },
+    "zstd"
+  ]
+}

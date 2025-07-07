@@ -1,0 +1,9 @@
+[
+   { include: [ '@<boost/json/.*>', private, '<boost/json.hpp>', public ] },
+   { include: [ '@<boost/asio/.*>', private, '<boost/asio.hpp>', public ] },
+   { include: [ '@<boost/mysql/.*>', private, '<boost/mysql.hpp>', public ] },
+   { include: [ '@<boost/program_option/.*>', private, '<boost/program_option.hpp>', public ] },
+   { include: [ '@<boost/uuid/.*>', private, '<boost/uuid.hpp>', public ] },
+   { include: [ '@<boost/process/.*>', private, '<boost/process.hpp>', public ] },
+   { include: [ '@<boost/beast/.*>', private, '<boost/beast.hpp>', public ]}
+]
