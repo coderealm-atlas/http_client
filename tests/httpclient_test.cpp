@@ -151,7 +151,10 @@ TEST(HttpClientTest, PostOnly) {
   auto httpbin_url = "https://httpbin.org/post?a=b";
   {
     http_io<PostJsonTag>(httpbin_url)
-        .then(set_json_body_io(R"({"key": "value"})"))
+        .map([](auto ex) {
+          ex->setRequestJsonBody({{"key", "value"}});
+          return ex;
+        })
         .then(http_request_io<PostJsonTag>(*http_client_))
         .catch_then([&](auto err) {
           std::cerr << "Error: " << err << "\n";
