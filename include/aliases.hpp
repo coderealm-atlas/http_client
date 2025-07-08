@@ -15,6 +15,7 @@
 #include <boost/move/utility_core.hpp>
 #include <boost/shared_ptr.hpp>
 #include <boost/url.hpp>  // IWYU pragma: keep
+#include <filesystem>
 
 namespace beast = boost::beast;    // from <boost/beast.hpp>
 namespace http = beast::http;      // from <boost/beast/http.hpp>
@@ -25,4 +26,5 @@ namespace logging = boost::log;
 namespace trivial = logging::trivial;
 namespace logsrc = boost::log::sources;
 namespace json = boost::json;
+namespace fs = std::filesystem;
 using tcp = net::ip::tcp;

@@ -38,12 +38,16 @@ add_compile_definitions(MAX_CHUNK_LENGTH_BYTES=8)
 add_compile_definitions(RYML_DEFAULT_CALLBACK_USES_EXCEPTIONS=1)
 # add_compile_definitions(-DRYML_DEFAULT_CALLBACKS=0)
 
+
+
 option(GTEST_COLOR "Enable colored output for gtest" ON)
 
 file(GLOB LIB_SOURCES ${CMAKE_SOURCE_DIR}/src/*.cpp)
 
 # ----------------------------httpclient_test.cpp------------------------------
 set(T_NAME httpclient_test)
+
+
 add_executable(${T_NAME}  
     httpclient_test.cpp
     ${LIB_SOURCES}
@@ -53,6 +57,7 @@ target_include_directories(${T_NAME}
     PRIVATE ./include
 )
 
+# target_precompile_headers(${T_NAME} PRIVATE ./include/pch.hpp)
 target_link_libraries(
     ${T_NAME}
     PRIVATE GTest::gtest GTest::gtest_main GTest::gmock GTest::gmock_main
@@ -87,6 +92,7 @@ target_include_directories(${T_NAME}
     PRIVATE ./include
 )
 
+# target_precompile_headers(${T_NAME} PRIVATE ./include/pch.hpp)
 target_link_libraries(
     ${T_NAME}
     PRIVATE GTest::gtest GTest::gtest_main GTest::gmock GTest::gmock_main
@@ -103,6 +109,27 @@ target_link_libraries(
         OpenSSL::Crypto
         ZLIB::ZLIB
         fmt::fmt-header-only
+    )
+add_test(
+    NAME ${T_NAME}
+    COMMAND ${T_NAME}
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+
+# ----------------------------urls_test.cpp------------------------------
+set(T_NAME urls_test)
+add_executable(${T_NAME}  
+    urls_test.cpp
+)
+target_include_directories(${T_NAME}
+    PRIVATE ./include
+)
+
+target_link_libraries(
+    ${T_NAME}
+    PRIVATE GTest::gtest GTest::gtest_main GTest::gmock GTest::gmock_main
+    PUBLIC 
+        Boost::url
+        Boost::json
     )
 add_test(
     NAME ${T_NAME}
