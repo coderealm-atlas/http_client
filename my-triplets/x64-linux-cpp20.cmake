@@ -3,13 +3,12 @@ set(VCPKG_CMAKE_SYSTEM_NAME Linux)
 
 set(VCPKG_CMAKE_CXX_STANDARD 20)
 set(VCPKG_CMAKE_CXX_STANDARD_REQUIRED ON)
-# set(VCPKG_CXX_FLAGS "-std=c++20 -DBSLS_LIBRARYFEATURES_HAS_CPP20_FEATURES -DBSLS_LIBRARYFEATURES_CPP20_ABI")
 
-set(VCPKG_CMAKE_C_FLAGS "-std=gnu11")
-# set(VCPKG_C_FLAGS "-std=gnu11")
-
-
+# Use dynamic CRT (runtime) linkage (for MSVC; has no effect on Linux)
 set(VCPKG_CRT_LINKAGE dynamic)
+
+# Use static library linking for all dependencies
 set(VCPKG_LIBRARY_LINKAGE static)
 
-
+set(CMAKE_C_COMPILER "clang")
+set(CMAKE_CXX_COMPILER "clang++")

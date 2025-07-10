@@ -45,7 +45,6 @@ TEST(HttpClientTest, Pool) {
     http_io<GetStatusTag>("https://example.com")
         .map([&](auto ex) {
           ex->request.set(http::field::authorization, "Bearer token");
-          ex->no_modify_req = true;
           return ex;
         })
         .then(http_request_io<GetStatusTag>(*http_client_))
@@ -66,7 +65,6 @@ TEST(HttpClientTest, Pool) {
     http_io<GetStringTag>("https://example.com")
         .map([](auto ex) {
           ex->request.set(http::field::authorization, "Bearer token");
-          ex->no_modify_req = true;
           return ex;
         })
         .then(http_request_io<GetStringTag>(*http_client_))
@@ -82,6 +80,7 @@ TEST(HttpClientTest, Pool) {
         });
   }
   notifier.waitForNotification();
+  http_client_->stop();
 }
 
 TEST(HttpClientTest, GetOnly) {
