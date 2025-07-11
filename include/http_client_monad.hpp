@@ -235,8 +235,6 @@ auto http_request_io(ClientPoolSsl& pool) {
         ex->request.set(http::field::user_agent, BOOST_BEAST_VERSION_STRING);
         // Set up an HTTP GET request message
         std::string target = ex->url.path().empty() ? "/" : ex->url.path();
-        std::cerr << "Request query: " << ex->url.query() << std::endl;
-        std::cerr << "Request query1: " << ex->url.encoded_query() << std::endl;
         if (!ex->url.query().empty()) {
           target = std::format("{}?{}", target,
                                std::string(ex->url.encoded_query()));
