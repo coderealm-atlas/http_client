@@ -2,22 +2,16 @@
 
 #include <openssl/ssl.h>
 
+#include <boost/asio.hpp>
 #include <boost/asio/ssl.hpp>
 #include <iostream>
 
-namespace ssl = boost::asio::ssl;
+namespace asio = boost::asio;
+namespace ssl = asio::ssl;
 
 namespace cjj365 {
 
 // Callback function to capture SSL debug messages
-inline void ssl_msg_callback(int write_p, int version, int content_type,
-                             const void* buf, size_t len, SSL* ssl, void* ctx) {
-  std::cout << "SSL Message (write_p=" << write_p << ", version=" << version
-            << ", content_type=" << content_type << ", len=" << len
-            << "): " << std::string((const char*)buf, len) << std::endl;
-  // Print any OpenSSL errors
-  ERR_print_errors_fp(stderr);
-}
 
 // inline ssl::context client_ssl_ctx{ssl::context::tls_client};
 // inline ssl::context client_ssl_ctx{ssl::context::tls};
@@ -72,4 +66,39 @@ inline ssl::context& client_ssl_ctx_no_verify() {
   }
   return client_ssl_ctx;
 }
+
+class ClientSSLContextWrapper {
+  static void ssl_msg_callback(int write_p, int version, int content_type,
+                               const void* buf, size_t len, SSL* ssl,
+                               void* ctx) {
+    std::cout << "SSL Message (write_p=" << write_p << ", version=" << version
+              << ", content_type=" << content_type << ", len=" << len
+              << "): " << std::string((const char*)buf, len) << std::endl;
+    // Print any OpenSSL errors
+    ERR_print_errors_fp(stderr);
+  }
+
+ public:
+  ClientSSLContextWrapper() : ctx_(ssl::context::tlsv12) {
+    // Set SSL message callback for debugging
+    SSL_CTX* ssl_ctx = ctx_.native_handle();
+    SSL_CTX_set_msg_callback(ssl_ctx, ssl_msg_callback);
+    ctx_.set_default_verify_paths();
+    ctx_.set_verify_mode(boost::asio::ssl::verify_peer);
+  }
+
+  // Get the underlying SSL context
+  ssl::context& context() { return ctx_; }
+
+  void add_certificate_authority(const std::string& pem_str) {
+    if (pem_str.empty()) {
+      throw std::runtime_error("Certificate authority string is empty.");
+    }
+    asio::const_buffer cb{pem_str.data(), pem_str.size()};
+    ctx_.add_certificate_authority(cb);
+  }
+
+ private:
+  ssl::context ctx_;
+};
 }  // namespace cjj365

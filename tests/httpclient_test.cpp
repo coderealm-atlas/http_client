@@ -24,10 +24,11 @@
 TEST(HttpClientTest, Pool) {
   using namespace monad;
   misc::ThreadNotifier notifier{};
-  auto ctx = std::make_unique<ssl::context>(ssl::context::tlsv12);
-  ctx->set_default_verify_paths();
 
-  auto http_client_ = std::make_unique<client_async::ClientPoolSsl>(8, *ctx);
+  cjj365::ClientSSLContextWrapper client_ssl_ctx;
+
+  auto http_client_ = std::make_unique<client_async::ClientPoolSsl>(
+      8, client_ssl_ctx.context());
   http_client_->start();
 
   urls::url_view url("https://example.com/hello?name=world#fragment");
@@ -86,10 +87,10 @@ TEST(HttpClientTest, Pool) {
 TEST(HttpClientTest, GetOnly) {
   using namespace monad;
   misc::ThreadNotifier notifier{};
-  auto ctx = std::make_unique<ssl::context>(ssl::context::tlsv12);
-  ctx->set_default_verify_paths();
+  cjj365::ClientSSLContextWrapper client_ssl_ctx;
 
-  auto http_client_ = std::make_unique<client_async::ClientPoolSsl>(8, *ctx);
+  auto http_client_ = std::make_unique<client_async::ClientPoolSsl>(
+      8, client_ssl_ctx.context());
   http_client_->start();
 
   // const gatewayDomain = "gray-quick-dove-13.mypinata.cloud"
@@ -141,10 +142,11 @@ TEST(HttpClientTest, GetOnly) {
 TEST(HttpClientTest, PostOnly) {
   using namespace monad;
   misc::ThreadNotifier notifier{};
-  auto ctx = std::make_unique<ssl::context>(ssl::context::tlsv12);
-  ctx->set_default_verify_paths();
 
-  auto http_client_ = std::make_unique<client_async::ClientPoolSsl>(8, *ctx);
+  cjj365::ClientSSLContextWrapper client_ssl_ctx;
+
+  auto http_client_ = std::make_unique<client_async::ClientPoolSsl>(
+      8, client_ssl_ctx.context());
   http_client_->start();
 
   auto httpbin_url = "https://httpbin.org/post?a=b";
@@ -196,10 +198,11 @@ TEST(HttpClientTest, PostOnly) {
 TEST(HttpClientTest, DfLogin) {
   using namespace monad;
   misc::ThreadNotifier notifier{};
-  auto ctx = std::make_unique<ssl::context>(ssl::context::tlsv12);
-  ctx->set_default_verify_paths();
 
-  auto http_client_ = std::make_unique<client_async::ClientPoolSsl>(8, *ctx);
+  cjj365::ClientSSLContextWrapper client_ssl_ctx;
+
+  auto http_client_ = std::make_unique<client_async::ClientPoolSsl>(
+      8, client_ssl_ctx.context());
   http_client_->start();
 
   std::string base_url = "https://test.datafocus.ai";
@@ -256,10 +259,11 @@ TEST(HttpClientTest, DfLogin) {
 TEST(HttpClientTest, DfListTable) {
   using namespace monad;
   misc::ThreadNotifier notifier{};
-  auto ctx = std::make_unique<ssl::context>(ssl::context::tlsv12);
-  ctx->set_default_verify_paths();
 
-  auto http_client_ = std::make_unique<client_async::ClientPoolSsl>(8, *ctx);
+  cjj365::ClientSSLContextWrapper client_ssl_ctx;
+
+  auto http_client_ = std::make_unique<client_async::ClientPoolSsl>(
+      8, client_ssl_ctx.context());
   http_client_->start();
   std::string base_url = "https://test.datafocus.ai";
   // https://test.datafocus.ai/df/table/list?name=%E7%94%B5%E5%95%86&sourceType=table&projectId=&pageNum=1&pageSize=60&stickerIds=&sort=timeDesc&sources=&status=&loadTypes=
