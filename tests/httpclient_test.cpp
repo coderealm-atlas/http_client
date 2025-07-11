@@ -27,8 +27,8 @@ TEST(HttpClientTest, Pool) {
 
   cjj365::ClientSSLContextWrapper client_ssl_ctx;
 
-  auto http_client_ = std::make_unique<client_async::ClientPoolSsl>(
-      8, client_ssl_ctx.context());
+  auto http_client_ =
+      std::make_unique<client_async::ClientPoolSsl>(client_ssl_ctx);
   http_client_->start();
 
   urls::url_view url("https://example.com/hello?name=world#fragment");
@@ -89,8 +89,8 @@ TEST(HttpClientTest, GetOnly) {
   misc::ThreadNotifier notifier{};
   cjj365::ClientSSLContextWrapper client_ssl_ctx;
 
-  auto http_client_ = std::make_unique<client_async::ClientPoolSsl>(
-      8, client_ssl_ctx.context());
+  auto http_client_ =
+      std::make_unique<client_async::ClientPoolSsl>(client_ssl_ctx);
   http_client_->start();
 
   // const gatewayDomain = "gray-quick-dove-13.mypinata.cloud"
@@ -145,8 +145,8 @@ TEST(HttpClientTest, PostOnly) {
 
   cjj365::ClientSSLContextWrapper client_ssl_ctx;
 
-  auto http_client_ = std::make_unique<client_async::ClientPoolSsl>(
-      8, client_ssl_ctx.context());
+  auto http_client_ =
+      std::make_unique<client_async::ClientPoolSsl>(client_ssl_ctx);
   http_client_->start();
 
   auto httpbin_url = "https://httpbin.org/post?a=b";
@@ -201,8 +201,8 @@ TEST(HttpClientTest, DfLogin) {
 
   cjj365::ClientSSLContextWrapper client_ssl_ctx;
 
-  auto http_client_ = std::make_unique<client_async::ClientPoolSsl>(
-      8, client_ssl_ctx.context());
+  auto http_client_ =
+      std::make_unique<client_async::ClientPoolSsl>(client_ssl_ctx);
   http_client_->start();
 
   std::string base_url = "https://test.datafocus.ai";
@@ -262,8 +262,8 @@ TEST(HttpClientTest, DfListTable) {
 
   cjj365::ClientSSLContextWrapper client_ssl_ctx;
 
-  auto http_client_ = std::make_unique<client_async::ClientPoolSsl>(
-      8, client_ssl_ctx.context());
+  auto http_client_ =
+      std::make_unique<client_async::ClientPoolSsl>(client_ssl_ctx);
   http_client_->start();
   std::string base_url = "https://test.datafocus.ai";
   // https://test.datafocus.ai/df/table/list?name=%E7%94%B5%E5%95%86&sourceType=table&projectId=&pageNum=1&pageSize=60&stickerIds=&sort=timeDesc&sources=&status=&loadTypes=

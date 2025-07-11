@@ -321,7 +321,6 @@ class session {
   std::chrono::seconds timeout_{30};
 
  protected:
-  // std::string url_;
   urls::url url_;
   callback_t callback_;
   logsrc::severity_logger<trivial::severity_level> lg;

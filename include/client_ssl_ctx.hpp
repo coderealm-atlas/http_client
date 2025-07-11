@@ -81,8 +81,8 @@ class ClientSSLContextWrapper {
  public:
   ClientSSLContextWrapper() : ctx_(ssl::context::tlsv12) {
     // Set SSL message callback for debugging
-    SSL_CTX* ssl_ctx = ctx_.native_handle();
-    SSL_CTX_set_msg_callback(ssl_ctx, ssl_msg_callback);
+    // SSL_CTX* ssl_ctx = ctx_.native_handle();
+    // SSL_CTX_set_msg_callback(ssl_ctx, ssl_msg_callback);
     ctx_.set_default_verify_paths();
     ctx_.set_verify_mode(boost::asio::ssl::verify_peer);
   }

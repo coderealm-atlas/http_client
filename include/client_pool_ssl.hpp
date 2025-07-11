@@ -1,5 +1,8 @@
 #pragma once
 
+#include <memory>
+
+#include "client_ssl_ctx.hpp"
 #include "explicit_instantiations.hpp"
 #include "http_session.hpp"
 
@@ -8,35 +11,35 @@ namespace client_async {
 class ClientPoolSsl {
  private:
   // The io_context is required for all I/O
-  net::io_context ioc;
+  std::unique_ptr<net::io_context> ioc;
   // The SSL context is required, and holds certificates
-  ssl::context& client_ssl_ctx;
-  int threads;
+  cjj365::ClientSSLContextWrapper& client_ssl_ctx;
+  int threads_;
   std::vector<std::thread> thread_pool;
-  boost::asio::executor_work_guard<boost::asio::io_context::executor_type>
+  std::unique_ptr<
+      boost::asio::executor_work_guard<boost::asio::io_context::executor_type>>
       work_guard;
 
  public:
-  ClientPoolSsl(int threads, ssl::context& ctx)
-      : threads(threads),
-        ioc{threads},
-        client_ssl_ctx(ctx),
-        work_guard(boost::asio::make_work_guard(ioc)) {
-    client_ssl_ctx.set_default_verify_paths();
-    client_ssl_ctx.set_verify_mode(boost::asio::ssl::verify_peer);
-  }
+  ClientPoolSsl(cjj365::ClientSSLContextWrapper& ctx) : client_ssl_ctx(ctx) {}
 
-  ClientPoolSsl& start() {
+  ClientPoolSsl& start(int threads = 2) {
+    ioc = std::make_unique<net::io_context>(threads);
+    work_guard = std::make_unique<boost::asio::executor_work_guard<
+        boost::asio::io_context::executor_type>>(
+        boost::asio::make_work_guard(*ioc));
+    threads_ = threads;
     for (size_t i = 0; i < threads; ++i) {
       thread_pool.emplace_back([this] {
-        ioc.run();  // Each thread runs the io_context
+        ioc->run();  // Each thread runs the io_context
       });
     }
     return *this;
   }
 
   void stop() {
-    ioc.stop();
+    work_guard->reset();
+    ioc->stop();
     for (auto& t : thread_pool) {
       if (t.joinable()) {
         t.join();
@@ -59,14 +62,14 @@ class ClientPoolSsl {
     if (url.scheme() == "https") {
       auto session = std::make_shared<
           session_ssl<RequestBody, ResponseBody, std::allocator<char>>>(
-          this->ioc, this->client_ssl_ctx, std::move(url), std::move(params),
-          std::move(callback), proxy_setting);
+          *(this->ioc), this->client_ssl_ctx.context(), std::move(url),
+          std::move(params), std::move(callback), proxy_setting);
       session->set_req(std::move(req));
       session->run();
     } else {
       auto session = std::make_shared<
           session_plain<RequestBody, ResponseBody, std::allocator<char>>>(
-          this->ioc, std::move(url), std::move(params), std::move(callback),
+          *(this->ioc), std::move(url), std::move(params), std::move(callback),
           proxy_setting);
       session->set_req(std::move(req));
       session->run();
