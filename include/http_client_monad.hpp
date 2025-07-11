@@ -190,15 +190,20 @@ template <typename>
 inline constexpr bool always_false = false;
 
 template <typename Tag>
-monad::IO<HttpExchangePtr<typename TagTraits<Tag>::Request,
-                          typename TagTraits<Tag>::Response>>
-http_io(const urls::url_view& url) {
+monad::
+    IO<HttpExchangePtr<typename TagTraits<Tag>::Request,
+                       typename TagTraits<Tag>::Response>>
+    /**
+     * url_view is not an owner type, so it musts be used immediately. DON'T
+     * KEEP IT. and DON'T MOVE THE REFERENCE.
+     */
+    http_io(const urls::url_view& url_view) {
   using Req = typename TagTraits<Tag>::Request;
   using Res = typename TagTraits<Tag>::Response;
   using ExchangePtr = HttpExchangePtr<Req, Res>;
-
-  return monad::IO<ExchangePtr>([url](auto cb) {
-    auto make_exchange = [&](Req&& req) {
+  // convert to owned type.
+  return monad::IO<ExchangePtr>([url = urls::url(url_view)](auto cb) {
+    auto make_exchange = [url, cb = std::move(cb)](Req&& req) {
       cb(ExchangePtr{
           std::make_shared<HttpExchange<Req, Res>>(url, std::move(req))});
     };
