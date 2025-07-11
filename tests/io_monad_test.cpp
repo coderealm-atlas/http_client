@@ -114,4 +114,75 @@ TEST(IOMonadTest, NonCopyableSupport) {
       });
 }
 
+TEST(IOMonadTest, MapErrTransformsError) {
+  IO<int>::fail(Error{404, "not found"})
+      .map_err([](Error e) { return Error{e.code + 1, "handled: " + e.what}; })
+      .run([](IO<int>::Result result) {
+        ASSERT_TRUE(std::holds_alternative<Error>(result));
+        const auto& err = std::get<Error>(result);
+        EXPECT_EQ(err.code, 405);
+        EXPECT_EQ(err.what, "handled: not found");
+      });
+}
+
+TEST(IOMonadTest, MapErrDoesNothingOnSuccess) {
+  IO<int>::pure(99)
+      .map_err([](Error e) {
+        ADD_FAILURE() << "map_err should not be called on success";
+        return e;
+      })
+      .run([](IO<int>::Result result) {
+        ASSERT_TRUE(std::holds_alternative<int>(result));
+        EXPECT_EQ(std::get<int>(result), 99);
+      });
+}
+
+TEST(IOMonadTest, FinallyCalledOnSuccess) {
+  bool called = false;
+
+  IO<std::string>::pure("ok")
+      .finally([&]() { called = true; })
+      .run([](IO<std::string>::Result result) {
+        ASSERT_TRUE(std::holds_alternative<std::string>(result));
+        EXPECT_EQ(std::get<std::string>(result), "ok");
+      });
+
+  EXPECT_TRUE(called);
+}
+
+TEST(IOMonadTest, FinallyCalledOnError) {
+  bool called = false;
+
+  IO<int>::fail(Error{123, "failure"})
+      .finally([&]() { called = true; })
+      .run([](IO<int>::Result result) {
+        ASSERT_TRUE(std::holds_alternative<Error>(result));
+        EXPECT_EQ(std::get<Error>(result).code, 123);
+      });
+
+  EXPECT_TRUE(called);
+}
+
+TEST(IOMonadTest, VoidMapErrWorks) {
+  IO<void>::fail(Error{888, "bad"})
+      .map_err([](Error e) { return Error{e.code + 1, "wrapped: " + e.what}; })
+      .run([](IO<void>::Result result) {
+        ASSERT_TRUE(std::holds_alternative<Error>(result));
+        EXPECT_EQ(std::get<Error>(result).code, 889);
+        EXPECT_EQ(std::get<Error>(result).what, "wrapped: bad");
+      });
+}
+
+TEST(IOMonadTest, VoidFinallyAlwaysCalled) {
+  bool called = false;
+
+  IO<void>::fail(Error{2, "err"})
+      .finally([&]() { called = true; })
+      .run([](IO<void>::Result result) {
+        ASSERT_TRUE(std::holds_alternative<Error>(result));
+      });
+
+  EXPECT_TRUE(called);
+}
+
 }  // namespace

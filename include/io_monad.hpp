@@ -124,6 +124,27 @@ class IO {
     });
   }
 
+  IO<T> map_err(std::function<Error(Error)> f) const {
+    return IO<T>([prev = *this, f = std::move(f)](typename IO<T>::Callback cb) {
+      prev.run([f, cb = std::move(cb)](typename IO<T>::Result result) mutable {
+        if (std::holds_alternative<Error>(result)) {
+          cb(f(std::get<Error>(result)));
+        } else {
+          cb(std::move(result));
+        }
+      });
+    });
+  }
+
+  IO<T> finally(std::function<void()> f) const {
+    return IO<T>([prev = *this, f = std::move(f)](Callback cb) {
+      prev.run([f, cb = std::move(cb)](Result result) mutable {
+        f();
+        cb(std::move(result));
+      });
+    });
+  }
+
   void run(Callback cb) const { thunk_(std::move(cb)); }
 
  private:
@@ -202,6 +223,27 @@ class IO<void> {
         } else {
           cb(std::move(result));
         }
+      });
+    });
+  }
+
+  IO<void> map_err(std::function<Error(Error)> f) const {
+    return IO<void>([prev = *this, f = std::move(f)](Callback cb) {
+      prev.run([f, cb = std::move(cb)](Result result) mutable {
+        if (std::holds_alternative<Error>(result)) {
+          cb(f(std::get<Error>(result)));
+        } else {
+          cb(std::move(result));
+        }
+      });
+    });
+  }
+
+  IO<void> finally(std::function<void()> f) const {
+    return IO<void>([prev = *this, f = std::move(f)](Callback cb) {
+      prev.run([f, cb = std::move(cb)](Result result) mutable {
+        f();
+        cb(std::move(result));
       });
     });
   }
