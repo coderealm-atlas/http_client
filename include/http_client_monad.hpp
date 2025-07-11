@@ -60,7 +60,7 @@ struct HttpExchange {
     }
   }
 
-  void setRequestJsonBody(const std::string& json_str) {
+  void setRequestJsonBodyFromString(const std::string& json_str) {
     request.body() = json_str;
     request.prepare_payload();
     contentTypeJson();
