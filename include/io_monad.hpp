@@ -17,7 +17,6 @@ namespace monad {
 struct Error {
   int code;
   std::string what;
-  Error(int c, std::string msg) : code(c), what(std::move(msg)) {}
 };
 
 inline std::ostream& operator<<(std::ostream& os, const Error& e) {
