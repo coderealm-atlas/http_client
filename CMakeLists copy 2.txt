@@ -33,6 +33,8 @@ message(STATUS "CMAKE_BINARY_DIR: ${CMAKE_BINARY_DIR}")
 if(CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
     if(MSVC)  # clang-cl
         message(STATUS "Using clang-cl under MSVC.")
+        # Avoid passing invalid GCC-style flags
+        # You may still use /ftime-trace if clang-cl supports it in your version
         add_compile_options(/clang:-ftime-trace)
     else()  # POSIX Clang (Linux/macOS)
         set(THREADS_PTHREADS_WEAK_SEARCH FALSE)
@@ -50,9 +52,8 @@ endif()
 
 # Windows-specific setup
 if(WIN32)
-add_compile_definitions(_WIN32_WINNT=0x0602)
-add_compile_definitions(-DGOOGLE_PROTOBUF_NO_CONSTINIT)
-add_compile_definitions(-DC4_MSVC)
+    add_definitions(-DGOOGLE_PROTOBUF_NO_CONSTINIT)
+    add_definitions(-DC4_MSVC)
 endif()
 
 # ---------------- ASAN Setup ----------------
@@ -82,9 +83,7 @@ else()
     add_definitions(-DRELEASE_BUILD)
     set(CMAKE_CXX_FLAGS_RELEASE "-O3 -flto=thin -DNDEBUG")
     set(CMAKE_C_FLAGS_RELEASE "-O3 -flto=thin -DNDEBUG")
-    if(CMAKE_CXX_COMPILER_ID MATCHES "Clang" AND NOT MSVC)
-        set(CMAKE_EXE_LINKER_FLAGS_RELEASE "-fuse-ld=lld")
-    endif()
+    set(CMAKE_EXE_LINKER_FLAGS_RELEASE "-fuse-ld=lld")
 endif()
 
 # ---------------- Definitions and Flags ----------------

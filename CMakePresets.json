@@ -53,18 +53,28 @@
       }
     },
     {
+      "name": "clang-msvc-debug-office",
+      "displayName": "Clang with MSVC Toolchain Office (Debug)",
+      "description": "Uses Clang with the MSVC toolchain for debug builds.",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/clang-msvc-debug",
+      "cacheVariables": {
+        "CMAKE_C_COMPILER": "clang-cl",
+        "CMAKE_CXX_COMPILER": "clang-cl",
+        "CMAKE_BUILD_TYPE": "Debug",
+        "VCPKG_DEFAULT_BINARY_CACHE": "D:/vcpkg/vcpkg_binary_cache"
+      },
+      "toolchainFile": "D:/vcpkg/scripts/buildsystems/vcpkg.cmake"
+    },
+    {
       "name": "debug",
       "inherits": "default",
       "description": "Debug build",
       "environment": {
-        "CAN_ACCESS_IN_PORT": "by $ENV{CAN_ACCESS_IN_PORT}",
         "ASAN_OPTIONS": "allocator_may_return_null=1",
         "CMAKE_BUILD_PARALLEL_LEVEL": "6",
-        "CMAKE_MAKE_PROGRAM": "colormake",
         "CCACHE_BASEDIR": "/home/jianglibo/bb",
-        "VCPKG_DEFAULT_BINARY_CACHE": "$env{VCPKG_DIR}/vcpkg_binary_cache",
-        "CXX": "/usr/bin/clang++",
-        "CC": "/usr/bin/clang"
+        "VCPKG_DEFAULT_BINARY_CACHE": "$env{VCPKG_DIR}/vcpkg_binary_cache"
       },
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Debug",

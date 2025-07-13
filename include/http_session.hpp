@@ -12,15 +12,18 @@
 #include <boost/log/utility/setup/common_attributes.hpp>
 #include <boost/log/utility/setup/file.hpp>
 #include <boost/url.hpp>
+#include <chrono>
 #include <filesystem>
+#include <optional>
 
 #include "base64.h"
 #include "explicit_instantiations.hpp"
 #include "proxy_pool.hpp"
 
+namespace fs = std::filesystem;
+
 namespace beast = boost::beast;
 namespace http = beast::http;
-namespace fs = std::filesystem;
 namespace asio = boost::asio;
 namespace ssl = boost::asio::ssl;
 namespace urls = boost::urls;
@@ -56,13 +59,15 @@ class session {
       const std::optional<ProxySetting>& proxy_setting = std::nullopt)
       : ioc_(ioc),
         resolver_(asio::make_strand(ioc)),
-        url_(std::move(url)),
-        body_file_(params.body_file),
-        callback_(std::move(callback)),
+        no_modify_req_(params.no_modify_req),
+        body_file_(params.body_file
+                       ? std::make_optional(params.body_file->string())
+                       : std::nullopt),
+        proxy_setting_(proxy_setting),
         default_port_(default_port),
         timeout_(params.timeout),
-        no_modify_req_(params.no_modify_req),
-        proxy_setting_(proxy_setting) {}
+        url_(std::move(url)),
+        callback_(std::move(callback)) {}
 
   // Start the asynchronous operation
   void run() {
