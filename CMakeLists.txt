@@ -87,6 +87,13 @@ else()
     endif()
 endif()
 
+if(CMAKE_CXX_COMPILER_ID MATCHES "Clang" AND NOT MSVC)
+    set(OpenMP_CXX_FLAGS "-fopenmp")
+    set(OpenMP_CXX_LIB_NAMES "omp")
+    set(OpenMP_omp_LIBRARY omp)
+endif()
+
+
 # ---------------- Definitions and Flags ----------------
 add_definitions(-DEIGEN_NO_DEBUG)
 add_definitions(-DBOOST_PROCESS_VERSION=2)
