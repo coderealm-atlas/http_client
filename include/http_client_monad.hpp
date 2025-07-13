@@ -39,6 +39,15 @@ struct HttpExchange {
   HttpExchange(const urls::url_view& url_input, Req request)
       : url(url_input), request(std::move(request)) {}
 
+  void setHostTargetRaw() {
+    std::string target = url.path().empty() ? "/" : url.path();
+    if (!url.query().empty()) {
+      target = std::format("{}?{}", target, url.query());
+    }
+    request.target(target);
+    request.set(http::field::host, url.host());
+  }
+
   void contentTypeJson() {
     request.set(http::field::content_type, "application/json");
   }
@@ -120,31 +129,27 @@ struct HttpExchange {
     return result;
   }
 
-  std::optional<json::object> getJsonResponse() {
+  std::optional<json::value> getJsonResponse() {
     try {
       if (response.has_value()) {
         const auto& response_string = response->body();
         if (response_string.empty()) {
-          BOOST_LOG_SEV(lg, trivial::warning) << "Received empty response body";
+          BOOST_LOG_SEV(lg, trivial::warning)
+              << "Received empty response body, headers: " << response->base();
           return std::nullopt;
         }
-        json::value jv = json::parse(response_string);
-        if (jv.is_object()) {
-          return jv.as_object();
-        } else {
-          BOOST_LOG_SEV(lg, trivial::error)
-              << "Response is not a valid JSON object: " << response_string;
-          return std::nullopt;
-        }
+        return json::parse(response_string);
       } else {
         BOOST_LOG_SEV(lg, trivial::error)
             << "Response is not available or empty";
-        return std::nullopt;
       }
     } catch (const std::exception& e) {
       BOOST_LOG_SEV(lg, trivial::error)
           << "Failed to get JSON response: " << e.what();
-      return std::nullopt;
+      if (response.has_value()) {
+        BOOST_LOG_SEV(lg, trivial::error)
+            << "Reponse body: " << response->body();
+      }
     }
     return std::nullopt;
   }
