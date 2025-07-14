@@ -54,3 +54,4 @@ test-results/
 .aider*
 FullCapture.bin
 .cache/*
+.clangd
