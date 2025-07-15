@@ -67,6 +67,22 @@
       "toolchainFile": "D:/vcpkg/scripts/buildsystems/vcpkg.cmake"
     },
     {
+      "name": "clang-msvc-debug-office-cl",
+      "displayName": "Clang with MSVC Toolchain Office (Debug) cl.exe",
+      "description": "Uses Clang with the MSVC toolchain for debug builds.",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/clang-msvc-debug",
+      "cacheVariables": {
+        "CMAKE_C_COMPILER": "cl",
+        "CMAKE_CXX_COMPILER": "cl",
+        "CMAKE_C_FLAGS": "/Zc:preprocessor /bigobj /D_WIN32_WINNT=0x0A00 /EHsc /utf-8",
+        "CMAKE_CXX_FLAGS": "/Zc:preprocessor /bigobj /D_WIN32_WINNT=0x0A00 /EHsc /utf-8",
+        "CMAKE_BUILD_TYPE": "Debug",
+        "VCPKG_DEFAULT_BINARY_CACHE": "D:/vcpkg/vcpkg_binary_cache"
+      },
+      "toolchainFile": "D:/vcpkg/scripts/buildsystems/vcpkg.cmake"
+    },
+    {
       "name": "debug",
       "inherits": "default",
       "description": "Debug build",

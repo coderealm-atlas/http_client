@@ -3,7 +3,7 @@
 #include <memory>
 
 #include "client_ssl_ctx.hpp"
-#include "explicit_instantiations.hpp"
+// #include "explicit_instantiations.hpp"
 #include "http_session.hpp"
 
 namespace client_async {
@@ -57,7 +57,7 @@ class ClientPoolSsl {
                    ResponseBody, http::basic_fields<std::allocator<char>>>>&&,
                int)>&& callback,
       HttpClientRequestParams&& params = {},
-      const std::optional<ProxySetting>& proxy_setting = std::nullopt) {
+      ProxySetting* proxy_setting = nullptr) {
     urls::url url(url_input);
     if (url.scheme() == "https") {
       auto session = std::make_shared<
@@ -77,8 +77,8 @@ class ClientPoolSsl {
   }
 };
 
-EXTERN_CLIENTPOOL_HTTP_REQUEST(http::string_body, http::string_body)
-EXTERN_CLIENTPOOL_HTTP_REQUEST(http::empty_body, http::string_body)
-EXTERN_CLIENTPOOL_HTTP_REQUEST(http::file_body, http::empty_body)
+// EXTERN_CLIENTPOOL_HTTP_REQUEST(http::string_body, http::string_body)
+// EXTERN_CLIENTPOOL_HTTP_REQUEST(http::empty_body, http::string_body)
+// EXTERN_CLIENTPOOL_HTTP_REQUEST(http::file_body, http::empty_body)
 
 }  // namespace client_async

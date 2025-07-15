@@ -17,7 +17,7 @@
 #include <optional>
 
 #include "base64.h"
-#include "explicit_instantiations.hpp"
+// #include "explicit_instantiations.hpp"
 #include "proxy_pool.hpp"
 
 namespace fs = std::filesystem;
@@ -50,13 +50,12 @@ class session {
   // ensure that handlers do not execute concurrently.
   Derived& derived() { return static_cast<Derived&>(*this); }
 
-  explicit session(
-      asio::io_context& ioc,             //
-      urls::url&& url,                   //
-      HttpClientRequestParams&& params,  //
-      callback_t&& callback,             //
-      const std::string& default_port,   //
-      const std::optional<ProxySetting>& proxy_setting = std::nullopt)
+  explicit session(asio::io_context& ioc,             //
+                   urls::url&& url,                   //
+                   HttpClientRequestParams&& params,  //
+                   callback_t&& callback,             //
+                   const std::string& default_port,   //
+                   ProxySetting* proxy_setting = nullptr)
       : ioc_(ioc),
         resolver_(asio::make_strand(ioc)),
         no_modify_req_(params.no_modify_req),
@@ -84,7 +83,7 @@ class session {
       req_.set(http::field::host, this->url_.host() + ":" + std::string(port));
     }
     // Look up the domain name
-    if (proxy_setting_.has_value()) {
+    if (proxy_setting_) {
       do_resolve_proxy();
     } else {
       do_resolve(this->url_.host(), port);
@@ -322,7 +321,7 @@ class session {
   std::optional<boost::beast::tcp_stream> proxy_stream_;
   std::optional<http::request<http::empty_body>> proxy_req_;
   std::optional<std::string> body_file_;
-  std::optional<ProxySetting> proxy_setting_;
+  ProxySetting* proxy_setting_;
   std::chrono::seconds timeout_{30};
 
  protected:
@@ -345,14 +344,13 @@ class session_ssl
   using response_t = std::optional<
       http::response<ResponseBody, http::basic_fields<Allocator>>>;
   using callback_t = std::function<void(response_t, int)>;
-  explicit session_ssl(
-      asio::io_context& ioc,  //
-      ssl::context& ctx,      //
-      // const std::string& url,            //
-      urls::url&& url,                   //
-      HttpClientRequestParams&& params,  //
-      callback_t&& callback,             //
-      const std::optional<ProxySetting>& proxy_setting = std::nullopt)
+  explicit session_ssl(asio::io_context& ioc,  //
+                       ssl::context& ctx,      //
+                       // const std::string& url,            //
+                       urls::url&& url,                   //
+                       HttpClientRequestParams&& params,  //
+                       callback_t&& callback,             //
+                       ProxySetting* proxy_setting = nullptr)
       : session<session_ssl, RequestBody, ResponseBody, Allocator>(
             ioc, std::move(url), std::move(params), std::move(callback), "443",
             proxy_setting),
@@ -436,13 +434,11 @@ class session_plain
   using response_t = std::optional<
       http::response<ResponseBody, http::basic_fields<Allocator>>>;
   using callback_t = std::function<void(response_t&&, int)>;
-  explicit session_plain(
-      asio::io_context& ioc,  //
-      // const std::string& url,            //
-      urls::url&& url,                   //
-      HttpClientRequestParams&& params,  //
-      callback_t&& callback,
-      const std::optional<ProxySetting>& proxy_setting = std::nullopt)
+  explicit session_plain(asio::io_context& ioc,  //
+                         urls::url&& url,                   //
+                         HttpClientRequestParams&& params,  //
+                         callback_t&& callback,
+                         ProxySetting* proxy_setting = nullptr)
       : session<session_plain<RequestBody, ResponseBody, Allocator>,
                 RequestBody, ResponseBody, Allocator>(
             ioc, std::move(url), std::move(params), std::move(callback), "80",
@@ -472,8 +468,8 @@ class session_plain
   }
 };
 
-EXTERN_HTTP_SESSION(http::string_body, http::string_body)
-EXTERN_HTTP_SESSION(http::empty_body, http::string_body)
-EXTERN_HTTP_SESSION(http::file_body, http::empty_body)
+// EXTERN_HTTP_SESSION(http::string_body, http::string_body)
+// EXTERN_HTTP_SESSION(http::empty_body, http::string_body)
+// EXTERN_HTTP_SESSION(http::file_body, http::empty_body)
 
 }  // namespace client_async

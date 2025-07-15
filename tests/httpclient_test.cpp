@@ -342,3 +342,58 @@ TEST(HttpClientTest, DfListTable) {
   notifier.waitForNotification();
   http_client_->stop();
 }
+
+TEST(HttpClientTest, GetOnlyWithProxyPool) {
+  using namespace monad;
+  misc::ThreadNotifier notifier{};
+  cjj365::ClientSSLContextWrapper client_ssl_ctx;
+
+  auto http_client_ =
+      std::make_unique<client_async::ClientPoolSsl>(client_ssl_ctx);
+  http_client_->start();
+
+  // const gatewayDomain = "gray-quick-dove-13.mypinata.cloud"
+  // const cid = "bafkreihxhxdozot7mukwx4hx55bbfxxd6vtesccuzgc2qicjrxhrp3rugy"
+  // const url = `https://${gatewayDomain}/ipfs/${cid}`
+  auto url = urls::format(
+      "https://{}/ipfs/{}", "gray-quick-dove-13.mypinata.cloud",
+      "bafkreihxhxdozot7mukwx4hx55bbfxxd6vtesccuzgc2qicjrxhrp3rugy");
+  ASSERT_EQ(url.buffer(),
+            "https://gray-quick-dove-13.mypinata.cloud/ipfs/"
+            "bafkreihxhxdozot7mukwx4hx55bbfxxd6vtesccuzgc2qicjrxhrp3rugy")
+      << "URL should match the expected format";
+
+  auto httpbin_url = "https://httpbin.org/get?a=b";
+  {
+    http_io<GetStringTag>(httpbin_url)
+        .map([](auto ex) {
+          ex->request.set(http::field::authorization, "Bearer token");
+          return ex;
+        })
+        .then(http_request_io<GetStringTag>(*http_client_))
+        .catch_then([&](auto err) {
+          std::cerr << "Error: " << err << "\n";
+          ADD_FAILURE() << "Request failed with error: " << err;
+          return IO<ExchangePtrFor<GetStringTag>>::fail(std::move(err));
+        })
+        .map([](auto ex) {
+          json::value jv = json::parse(ex->response->body());
+          EXPECT_TRUE(jv.as_object().contains("args"))
+              << "Response should contain 'args' field";
+          EXPECT_TRUE(jv.as_object().contains("headers"))
+              << "Response should contain 'headers' field";
+          EXPECT_TRUE(jv.as_object().contains("url"))
+              << "Response should contain 'url' field";
+          std::cout << "Response: " << jv << std::endl;
+          return ex;
+        })
+        .run([&](auto result) {
+          if (std::holds_alternative<monad::Error>(result)) {
+            std::cerr << std::get<monad::Error>(result) << "\n";
+          }
+          notifier.notify();
+        });
+  }
+  notifier.waitForNotification();
+  http_client_->stop();
+}
