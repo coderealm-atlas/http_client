@@ -48,7 +48,6 @@ class ClientPoolSsl {
   }
   template <class RequestBody, class ResponseBody>
   void http_request(
-      // const std::string& url,
       const urls::url_view& url_input,
       http::request<RequestBody, http::basic_fields<std::allocator<char>>>&&
           req,
@@ -57,7 +56,7 @@ class ClientPoolSsl {
                    ResponseBody, http::basic_fields<std::allocator<char>>>>&&,
                int)>&& callback,
       HttpClientRequestParams&& params = {},
-      ProxySetting* proxy_setting = nullptr) {
+      const ProxySetting* proxy_setting = nullptr) {
     urls::url url(url_input);
     if (url.scheme() == "https") {
       auto session = std::make_shared<

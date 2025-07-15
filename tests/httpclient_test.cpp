@@ -352,6 +352,8 @@ TEST(HttpClientTest, GetOnlyWithProxyPool) {
       std::make_unique<client_async::ClientPoolSsl>(client_ssl_ctx);
   http_client_->start();
 
+  client_async::ProxyPool proxy_pool;
+
   // const gatewayDomain = "gray-quick-dove-13.mypinata.cloud"
   // const cid = "bafkreihxhxdozot7mukwx4hx55bbfxxd6vtesccuzgc2qicjrxhrp3rugy"
   // const url = `https://${gatewayDomain}/ipfs/${cid}`
@@ -366,8 +368,9 @@ TEST(HttpClientTest, GetOnlyWithProxyPool) {
   auto httpbin_url = "https://httpbin.org/get?a=b";
   {
     http_io<GetStringTag>(httpbin_url)
-        .map([](auto ex) {
+        .map([&proxy_pool](auto ex) {
           ex->request.set(http::field::authorization, "Bearer token");
+          ex->proxy = proxy_pool.next();
           return ex;
         })
         .then(http_request_io<GetStringTag>(*http_client_))

@@ -29,7 +29,7 @@ struct HttpExchange {
   bool follow_redirect = true;
   logsrc::severity_logger<trivial::severity_level> lg;
   bool no_modify_req = false;
-  ProxySetting* proxy = nullptr;
+  const ProxySetting* proxy = nullptr;
   Req request;
   std::optional<Res> response = std::nullopt;
   std::optional<fs::path> response_file = std::nullopt;

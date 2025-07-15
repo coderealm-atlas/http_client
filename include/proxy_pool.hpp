@@ -6,8 +6,8 @@
 #include <string>
 #include <unordered_map>
 #include <vector>
-#include "aliases.hpp"
 
+#include "aliases.hpp"
 
 namespace client_async {
 struct ProxySetting {
@@ -60,11 +60,10 @@ class ProxyPool {
     return proxies_.size();
   }
 
-  std::optional<ProxySetting> next() {
+  const ProxySetting* next() {
     std::lock_guard<std::mutex> lock(mutex_);
     if (proxies_.empty()) {
-      BOOST_LOG_SEV(lg, trivial::error) << "Proxy list is empty";
-      return std::nullopt;
+      return nullptr;
     }
     clean_expired();
     std::size_t tries = 0;
@@ -74,14 +73,14 @@ class ProxyPool {
       if (!is_blacklisted(proxy)) {
         BOOST_LOG_SEV(lg, trivial::debug)
             << "Returning proxy: " << proxy.host << ":" << proxy.port;
-        return proxy;
+        return &proxy;
       }
       ++tries;
     }
 
     BOOST_LOG_SEV(lg, trivial::warning)
         << "All proxies are currently blacklisted";
-    return std::nullopt;
+    return nullptr;
   }
 
   void blacklist(const ProxySetting& proxy,
