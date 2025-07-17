@@ -3,25 +3,16 @@
 #include <exception>
 #include <functional>
 #include <memory>
-#include <ostream>
-#include <string>
 #include <type_traits>
 #include <utility>
 #include <variant>
+
+#include "result_monad.hpp"
 
 // This is a simple IO monad implementation in C++.
 // It allows for chaining operations that may involve side effects,
 // such as I/O operations, while maintaining a functional style.
 namespace monad {
-
-struct Error {
-  int code;
-  std::string what;
-};
-
-inline std::ostream& operator<<(std::ostream& os, const Error& e) {
-  return os << "[Error " << e.code << "] " << e.what;
-}
 
 template <typename T>
 class IO {
