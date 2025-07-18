@@ -82,13 +82,11 @@ add_test(
     COMMAND ${T_NAME}
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 
-file(GLOB UTIL_SOURCES ${CMAKE_SOURCE_DIR}/include/*.cpp)
-
 # ----------------------------io_monad_test.cpp------------------------------
 set(T_NAME io_monad_test)
 add_executable(${T_NAME}  
     io_monad_test.cpp
-    ${UTIL_SOURCES}
+    ${LIB_SOURCES}
 )
 target_include_directories(${T_NAME}
     PUBLIC ${CMAKE_SOURCE_DIR}/include
