@@ -11,6 +11,7 @@
 
 #include "client_pool_ssl.hpp"
 #include "io_monad.hpp"
+#include "result_monad.hpp"
 
 namespace monad {
 

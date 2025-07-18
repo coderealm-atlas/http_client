@@ -18,6 +18,7 @@
 #include <variant>
 
 #include "io_monad.hpp"  // include your monad definition
+#include "json_util.hpp"
 
 using namespace monad;
 
@@ -183,6 +184,20 @@ TEST(IOMonadTest, VoidFinallyAlwaysCalled) {
       });
 
   EXPECT_TRUE(called);
+}
+
+TEST(JsonTest, expect_true) {
+  using namespace jsonutil;
+  json::value jv = {
+      {"key1", true}, {"key2", false}, {"key3", 123}, {"key4", "value"}};
+
+  ASSERT_TRUE(expect_true_at(jv, "key1").is_ok()) << "Expected true at key1";
+  ASSERT_FALSE(expect_true_at(jv, "key2").is_ok())
+      << "Expected false at key2, but got true";
+  ASSERT_FALSE(expect_true_at(jv, "key3").is_ok())
+      << "Expected false at key3, but got true";
+  ASSERT_FALSE(expect_true_at(jv, "key4").is_ok())
+      << "Expected false at key4, but got true";
 }
 
 }  // namespace
