@@ -130,19 +130,18 @@ struct HttpExchange {
     return result;
   }
 
-  std::optional<json::value> getJsonResponse() {
+  MyResult<json::value> getJsonResponse() {
     try {
       if (response.has_value()) {
         const auto& response_string = response->body();
         if (response_string.empty()) {
-          BOOST_LOG_SEV(lg, trivial::warning)
-              << "Received empty response body, headers: " << response->base();
-          return std::nullopt;
+          return MyResult<json::value>::Err(
+              Error{400, "Response body is empty"});
         }
         return json::parse(response_string);
       } else {
-        BOOST_LOG_SEV(lg, trivial::error)
-            << "Response is not available or empty";
+        return MyResult<json::value>::Err(
+            Error{400, "Response is not available or empty"});
       }
     } catch (const std::exception& e) {
       BOOST_LOG_SEV(lg, trivial::error)
@@ -150,9 +149,14 @@ struct HttpExchange {
       if (response.has_value()) {
         BOOST_LOG_SEV(lg, trivial::error)
             << "Reponse body: " << response->body();
+        return MyResult<json::value>::Err(Error{
+            500, std::format("Failed to parse JSON response: {}, body:\n{}",
+                             e.what(), response->body())});
+      } else {
+        return MyResult<json::value>::Err(Error{
+            500, std::string("Failed to parse JSON response: ") + e.what()});
       }
     }
-    return std::nullopt;
   }
 };
 

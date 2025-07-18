@@ -186,6 +186,75 @@ TEST(IOMonadTest, VoidFinallyAlwaysCalled) {
   EXPECT_TRUE(called);
 }
 
+using monad::Error;
+using monad::MyResult;
+using monad::Result;
+
+TEST(ResultTest, OkConstructionAndAccess) {
+  MyResult<int> res = MyResult<int>::Ok(42);
+  EXPECT_TRUE(res.is_ok());
+  EXPECT_FALSE(res.is_err());
+  EXPECT_EQ(res.value(), 42);
+}
+
+TEST(ResultTest, ErrConstructionAndAccess) {
+  Error err{1, "error"};
+  MyResult<int> res = MyResult<int>::Err(err);
+  EXPECT_TRUE(res.is_err());
+  EXPECT_FALSE(res.is_ok());
+  EXPECT_EQ(res.error().code, 1);
+  EXPECT_EQ(res.error().what, "error");
+}
+
+TEST(ResultTest, MapTransformsValue) {
+  MyResult<int> res = MyResult<int>::Ok(5);
+  auto mapped = res.map([](int x) { return x * 2; });
+  EXPECT_TRUE(mapped.is_ok());
+  EXPECT_EQ(mapped.value(), 10);
+}
+
+TEST(ResultTest, MapPreservesError) {
+  Error err{404, "not found"};
+  MyResult<int> res = MyResult<int>::Err(err);
+  auto mapped = res.map([](int x) { return x * 2; });
+  EXPECT_TRUE(mapped.is_err());
+  EXPECT_EQ(mapped.error().code, 404);
+}
+
+TEST(ResultTest, AndThenChainsOk) {
+  MyResult<int> res = MyResult<int>::Ok(3);
+  auto chained = res.and_then([](int x) {
+    return MyResult<std::string>::Ok(std::string(x, 'a'));  // "aaa"
+  });
+  EXPECT_TRUE(chained.is_ok());
+  EXPECT_EQ(chained.value(), "aaa");
+}
+
+TEST(ResultTest, AndThenPreservesError) {
+  Error err{2, "fail"};
+  MyResult<int> res = MyResult<int>::Err(err);
+  auto chained = res.and_then(
+      [](int x) { return MyResult<std::string>::Ok(std::to_string(x)); });
+  EXPECT_TRUE(chained.is_err());
+  EXPECT_EQ(chained.error().code, 2);
+}
+
+TEST(ResultTest, CatchThenRecoversFromError) {
+  MyResult<int> res = MyResult<int>::Err(Error{999, "boom"});
+  auto recovered =
+      res.catch_then([](const Error& e) { return MyResult<int>::Ok(100); });
+  EXPECT_TRUE(recovered.is_ok());
+  EXPECT_EQ(recovered.value(), 100);
+}
+
+TEST(ResultTest, CatchThenPassesThroughOk) {
+  MyResult<int> res = MyResult<int>::Ok(123);
+  auto recovered =
+      res.catch_then([](const Error& e) { return MyResult<int>::Ok(0); });
+  EXPECT_TRUE(recovered.is_ok());
+  EXPECT_EQ(recovered.value(), 123);
+}
+
 TEST(JsonTest, expect_true) {
   using namespace jsonutil;
   json::value jv = {
