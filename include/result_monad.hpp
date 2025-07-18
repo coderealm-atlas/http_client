@@ -44,17 +44,28 @@ class Result {
   const E& error() const { return std::get<E>(data_); }
   E& error() { return std::get<E>(data_); }
 
-  // map: T -> U
+  // into: convert to rvalue
+  Result&& into() && { return std::move(*this); }
+
+  // map: T -> U (copy version)
   template <typename F>
-  auto map(F&& f) const -> Result<std::invoke_result_t<F, T>, E> {
+  auto map(F&& f) const& -> Result<std::invoke_result_t<F, T>, E> {
     using U = std::invoke_result_t<F, T>;
     if (is_ok()) return Result<U, E>(std::invoke(f, value()));
     return Result<U, E>(error());
   }
 
-  // and_then: T -> Result<U, E>
+  // map: T -> U (move version)
   template <typename F>
-  auto and_then(F&& f) const -> std::invoke_result_t<F, T> {
+  auto map(F&& f) && -> Result<std::invoke_result_t<F, T>, E> {
+    using U = std::invoke_result_t<F, T>;
+    if (is_ok()) return Result<U, E>(std::invoke(f, std::move(value())));
+    return Result<U, E>(std::move(error()));
+  }
+
+  // and_then: T -> Result<U, E> (copy version)
+  template <typename F>
+  auto and_then(F&& f) const& -> std::invoke_result_t<F, T> {
     using Ret = std::invoke_result_t<F, T>;
     static_assert(std::is_same_v<Ret, Result<typename Ret::value_type, E>>,
                   "and_then must return Result<U,E>");
@@ -62,14 +73,34 @@ class Result {
     return Ret::Err(error());
   }
 
-  // catch_then: E -> Result<T, F>
+  // and_then: T -> Result<U, E> (move version) look at &&
   template <typename F>
-  auto catch_then(F&& f) const -> std::invoke_result_t<F, E> {
+  auto and_then(F&& f) && -> std::invoke_result_t<F, T> {
+    using Ret = std::invoke_result_t<F, T>;
+    static_assert(std::is_same_v<Ret, Result<typename Ret::value_type, E>>,
+                  "and_then must return Result<U,E>");
+    if (is_ok()) return std::invoke(f, std::move(value()));
+    return Ret::Err(std::move(error()));
+  }
+
+  // catch_then: E -> Result<T, F> (copy version)
+  template <typename F>
+  auto catch_then(F&& f) const& -> std::invoke_result_t<F, E> {
     using Ret = std::invoke_result_t<F, E>;
     static_assert(std::is_same_v<Ret, Result<T, typename Ret::error_type>>,
                   "catch_then must return Result<T,F>");
     if (is_err()) return std::invoke(f, error());
     return Ret::Ok(value());
+  }
+
+  // catch_then: E -> Result<T, F> (move version)
+  template <typename F>
+  auto catch_then(F&& f) && -> std::invoke_result_t<F, E> {
+    using Ret = std::invoke_result_t<F, E>;
+    static_assert(std::is_same_v<Ret, Result<T, typename Ret::error_type>>,
+                  "catch_then must return Result<T,F>");
+    if (is_err()) return std::invoke(f, std::move(error()));
+    return Ret::Ok(std::move(value()));
   }
 
   // type aliases for introspection
@@ -95,12 +126,23 @@ class Result<void, E> {
   const E& error() const { return *error_; }
   E& error() { return *error_; }
 
+  Result&& into() && { return std::move(*this); }
+
   template <typename F>
-  auto catch_then(F&& f) const -> std::invoke_result_t<F, E> {
+  auto catch_then(F&& f) const& -> std::invoke_result_t<F, E> {
     using Ret = std::invoke_result_t<F, E>;
     static_assert(std::is_same_v<typename Ret::value_type, void>,
                   "catch_then must return Result<void,F>");
     if (is_err()) return std::invoke(f, *error_);
+    return Ret::Ok();
+  }
+
+  template <typename F>
+  auto catch_then(F&& f) && -> std::invoke_result_t<F, E> {
+    using Ret = std::invoke_result_t<F, E>;
+    static_assert(std::is_same_v<typename Ret::value_type, void>,
+                  "catch_then must return Result<void,F>");
+    if (is_err()) return std::invoke(f, std::move(*error_));
     return Ret::Ok();
   }
 
