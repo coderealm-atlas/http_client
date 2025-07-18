@@ -2,12 +2,40 @@
 
 #include <boost/json.hpp>
 #include <boost/json/fwd.hpp>
+#include <boost/json/object.hpp>
+#include <boost/json/serialize.hpp>
 #include <charconv>
 #include <format>
 #include <iostream>
 #include <string>
 
 namespace jsonutil {
+MyResult<json::object> expect_object_at(json::value&& val,
+                                        std::string_view k1) {
+  if (auto* ob_p = val.if_object()) {
+    if (auto* k1_p = ob_p->if_contains(k1)) {
+      if (auto* k1_o_p = k1_p->if_object()) {
+        return MyResult<json::object>::Ok(std::move(*k1_o_p));
+      }
+    }
+  }
+  return MyResult<json::object>::Err(
+      {.code = 1,
+       .what = std::format("Expect object but not an object. body: {}",
+                           json::serialize(val))});
+}
+
+MyResult<json::value> expect_value_at(json::value&& val, std::string_view k1) {
+  if (auto* ob_p = val.if_object()) {
+    if (auto* k1_p = ob_p->if_contains(k1)) {
+      return MyResult<json::value>::Ok(std::move(*k1_p));
+    }
+  }
+  return MyResult<json::value>::Err(
+      {.code = 1,
+       .what = std::format("Expect object but not an object. body: {}",
+                           json::serialize(val))});
+}
 
 MyResult<json::object> expect_object_at(json::value&& val, std::string_view k1,
                                         std::string_view k2) {

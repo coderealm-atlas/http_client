@@ -19,6 +19,8 @@ MyResult<json::object> expect_object_at(json::value&& val, std::string_view k1,
                                         std::string_view k3);
 monad::MyVoidResult expect_true_at(const json::value& val, std::string_view k1);
 
+MyResult<json::value> expect_value_at(json::value&& val, std::string_view k1);
+
 std::string replace_env_var(
     const std::string& input,
     const std::map<std::string, std::string>& extra_map);
