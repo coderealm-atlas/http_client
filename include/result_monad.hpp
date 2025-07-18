@@ -2,10 +2,11 @@
 #pragma once
 
 #include <functional>
+#include <optional>
+#include <ostream>
 #include <string>
 #include <type_traits>
 #include <variant>
-#include <ostream>
 
 namespace monad {
 
@@ -76,7 +77,40 @@ class Result {
   using error_type = E;
 };
 
+template <typename E>
+class Result<void, E> {
+  std::optional<E> error_;
+
+ public:
+  Result() = default;  // success
+  Result(const E& error) : error_(error) {}
+  Result(E&& error) : error_(std::move(error)) {}
+
+  static Result Ok() { return Result(); }
+  static Result Err(E error) { return Result(std::move(error)); }
+
+  bool is_ok() const { return !error_.has_value(); }
+  bool is_err() const { return error_.has_value(); }
+
+  const E& error() const { return *error_; }
+  E& error() { return *error_; }
+
+  template <typename F>
+  auto catch_then(F&& f) const -> std::invoke_result_t<F, E> {
+    using Ret = std::invoke_result_t<F, E>;
+    static_assert(std::is_same_v<typename Ret::value_type, void>,
+                  "catch_then must return Result<void,F>");
+    if (is_err()) return std::invoke(f, *error_);
+    return Ret::Ok();
+  }
+
+  using value_type = void;
+  using error_type = E;
+};
+
 template <typename T>
 using MyResult = monad::Result<T, Error>;
+
+using MyVoidResult = Result<void, Error>;
 
 }  // namespace monad

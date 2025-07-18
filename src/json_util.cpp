@@ -71,17 +71,19 @@ MyResult<json::object> expect_object_at(json::value&& val, std::string_view k1,
   return MyResult<json::object>::Ok(std::move(it3->value().as_object()));
 }
 
-MyResult<bool> expect_true_at(const json::value& val, std::string_view k1) {
+monad::MyVoidResult expect_true_at(const json::value& val,
+                                   std::string_view k1) {
   if (auto* jo_p = val.if_object()) {
     if (auto* k1_p = jo_p->if_contains(k1)) {
       if (auto* b_p = k1_p->if_bool()) {
         if (*b_p) {
-          return MyResult<bool>::Ok(true);
+          return monad::MyVoidResult::Ok();
         }
       }
     }
   }
-  return MyResult<bool>::Err({1, "Expected true at key: " + std::string(k1)});
+  return monad::MyVoidResult::Err(
+      {1, "Expected true at key: " + std::string(k1)});
 }
 // Helper function to replace ${VARIABLE} or ${VARIABLE:-default} with the
 // environment variable

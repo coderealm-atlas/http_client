@@ -255,6 +255,38 @@ TEST(ResultTest, CatchThenPassesThroughOk) {
   EXPECT_EQ(recovered.value(), 123);
 }
 
+TEST(ResultVoidTest, OkResult) {
+  MyVoidResult result = MyVoidResult::Ok();
+  EXPECT_TRUE(result.is_ok());
+  EXPECT_FALSE(result.is_err());
+}
+
+TEST(ResultVoidTest, ErrResult) {
+  Error err = {404, "Not Found"};
+  MyVoidResult result = MyVoidResult::Err(err);
+  EXPECT_TRUE(result.is_err());
+  EXPECT_FALSE(result.is_ok());
+  EXPECT_EQ(result.error().code, err.code);
+}
+
+TEST(ResultVoidTest, CatchThenOnError) {
+  MyVoidResult result = MyVoidResult::Err({123, "Oops"});
+  auto recovered = result.catch_then([](const Error& e) {
+    EXPECT_EQ(e.code, 123);
+    return MyVoidResult::Ok();
+  });
+  EXPECT_TRUE(recovered.is_ok());
+}
+
+TEST(ResultVoidTest, CatchThenOnSuccessSkipsHandler) {
+  MyVoidResult result = MyVoidResult::Ok();
+  auto recovered = result.catch_then([](const Error&) {
+    ADD_FAILURE() << "Should not be called on Ok";
+    return MyVoidResult::Err({999, "Unexpected"});
+  });
+  EXPECT_TRUE(recovered.is_ok());
+}
+
 TEST(JsonTest, expect_true) {
   using namespace jsonutil;
   json::value jv = {
