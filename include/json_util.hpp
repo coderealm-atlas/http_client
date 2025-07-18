@@ -1,6 +1,7 @@
 #pragma once
 
 #include <boost/json.hpp>
+#include <cstdint>
 #include <map>
 
 #include "result_monad.hpp"
@@ -20,6 +21,9 @@ MyResult<json::object> expect_object_at(json::value&& val, std::string_view k1,
 monad::MyVoidResult expect_true_at(const json::value& val, std::string_view k1);
 
 MyResult<json::value> expect_value_at(json::value&& val, std::string_view k1);
+
+bool could_be_uint64(const json::value& jv, uint64_t& out_value);
+MyResult<uint64_t> to_uint64(const json::value& jv);
 
 std::string replace_env_var(
     const std::string& input,

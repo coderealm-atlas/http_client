@@ -5,9 +5,12 @@
 #include <boost/json/object.hpp>
 #include <boost/json/serialize.hpp>
 #include <charconv>
+#include <cstdint>
 #include <format>
 #include <iostream>
 #include <string>
+
+#include "result_monad.hpp"
 
 namespace jsonutil {
 MyResult<json::object> expect_object_at(json::value&& val,
@@ -372,6 +375,48 @@ std::string prettyPrint(const boost::json::value& val, int level) {
 
     default:
       return "";  // Should not happen
+  }
+}
+
+bool could_be_uint64(const json::value& jv, uint64_t& out_value) {
+  if (jv.is_uint64()) {
+    out_value = jv.to_number<uint64_t>();
+    return true;
+  } else if (jv.is_int64()) {
+    auto v = jv.to_number<int64_t>();
+    if (v >= 0) {
+      out_value = static_cast<uint64_t>(v);
+      return true;
+    }
+  } else if (jv.is_double()) {
+    double v = jv.to_number<double>();
+    if (v >= 0 && v == std::floor(v) && v <= static_cast<double>(UINT64_MAX)) {
+      out_value = static_cast<uint64_t>(v);
+      return true;
+    }
+  }
+  return false;
+}
+
+MyResult<uint64_t> to_uint64(const json::value& jv) {
+  if (jv.is_uint64()) {
+    return MyResult<uint64_t>::Ok(jv.to_number<uint64_t>());
+  } else if (jv.is_int64()) {
+    auto v = jv.to_number<int64_t>();
+    if (v >= 0) {
+      return MyResult<uint64_t>::Ok(static_cast<uint64_t>(v));
+    } else {
+      return MyResult<uint64_t>::Err({.code = 1, .what = "less than 0."});
+    }
+  } else if (jv.is_double()) {
+    double v = jv.to_number<double>();
+    if (v >= 0 && v == std::floor(v) && v <= static_cast<double>(UINT64_MAX)) {
+      return MyResult<uint64_t>::Ok(static_cast<uint64_t>(v));
+    } else {
+      return MyResult<uint64_t>::Err({.code = 1, .what = "out of range."});
+    }
+  } else {
+    return MyResult<uint64_t>::Err({.code = 1, .what = "not a number."});
   }
 }
 
