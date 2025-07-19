@@ -1,6 +1,7 @@
 #pragma once
 
 #include <boost/beast/http.hpp>
+#include <boost/beast/http/empty_body.hpp>
 #include <boost/core/detail/string_view.hpp>
 #include <boost/json/serializer.hpp>
 #include <format>
@@ -171,6 +172,7 @@ struct TagTraits;
 struct GetStringTag {};  // Example tag
 struct GetStatusTag {};  // New tag
 struct PostJsonTag {};   // Another example tag
+struct GetHeaderTag {};
 
 template <>
 struct TagTraits<GetStringTag> {
@@ -188,6 +190,12 @@ template <>
 struct TagTraits<PostJsonTag> {
   using Request = http::request<http::string_body>;
   using Response = http::response<http::string_body>;
+};
+
+template <>
+struct TagTraits<GetHeaderTag> {
+  using Request = http::request<http::empty_body>;
+  using Response = http::response<http::empty_body>;
 };
 
 // ----- Monadic Constructor -----
