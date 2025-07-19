@@ -244,13 +244,14 @@ monad::
 
 // ----- Monadic Request Invoker -----
 template <typename Tag>
-auto http_request_io(ClientPoolSsl& pool) {
+auto http_request_io(ClientPoolSsl& pool, int verbose = 0) {
   using Req = typename TagTraits<Tag>::Request;
   using Res = typename TagTraits<Tag>::Response;
   using ExchangePtr = HttpExchangePtr<Req, Res>;
 
-  return [&pool](ExchangePtr ex) {
-    return monad::IO<ExchangePtr>([&pool, ex = std::move(ex)](auto cb) mutable {
+  return [&pool, verbose](ExchangePtr ex) {
+    return monad::IO<ExchangePtr>([&pool, verbose,
+                                   ex = std::move(ex)](auto cb) mutable {
       if (!ex->no_modify_req) {
         ex->request.set(http::field::user_agent, BOOST_BEAST_VERSION_STRING);
         // Set up an HTTP GET request message
@@ -262,8 +263,10 @@ auto http_request_io(ClientPoolSsl& pool) {
         ex->request.target(target);
       }
       Req request_copy = ex->request;  // preserve original
-      std::cerr << "Before request headers: " << request_copy.base()
-                << std::endl;
+      if (verbose > 0) {
+        std::cerr << "Before request headers: " << request_copy.base()
+                  << std::endl;
+      }
       pool.http_request<typename Req::body_type, typename Res::body_type>(
           ex->url, std::move(request_copy),
           [cb = std::move(cb), ex](std::optional<Res> resp, int err) mutable {
