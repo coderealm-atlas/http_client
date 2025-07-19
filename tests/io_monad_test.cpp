@@ -301,4 +301,34 @@ TEST(JsonTest, expect_true) {
       << "Expected false at key4, but got true";
 }
 
+TEST(DelayTest, delay_for) {
+  boost::asio::io_context ioc;
+  auto io = delay_for<>(ioc, std::chrono::milliseconds(100));
+
+  bool called = false;
+  io.run([&called](IO<void>::Result result) {
+    ASSERT_TRUE(std::holds_alternative<std::monostate>(result));
+    called = true;
+  });
+
+  ioc.run();
+  EXPECT_TRUE(called);
+}
+
+TEST(DelayTest, delay_then) {
+  boost::asio::io_context ioc;
+  auto io = IO<void>::pure().then([&ioc]() {
+    return delay_then(ioc, std::chrono::milliseconds(2000),
+                      std::string("hello"));
+  });
+  bool called = false;
+  io.run([&called](auto result) {
+    ASSERT_TRUE(std::holds_alternative<std::string>(result));
+    EXPECT_EQ(std::get<std::string>(result), "hello");
+    called = true;
+  });
+  ioc.run();
+  EXPECT_TRUE(called);
+}
+
 }  // namespace

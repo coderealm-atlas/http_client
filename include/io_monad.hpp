@@ -1,5 +1,7 @@
 #pragma once
 
+#include <boost/asio.hpp>
+#include <chrono>
 #include <exception>
 #include <functional>
 #include <memory>
@@ -252,6 +254,33 @@ IO<void> chain_io(const std::vector<T>& vec, F&& f) {
     acc = acc.then([&, i]() { return f(i, vec[i]); });
   }
   return acc;
+}
+
+template <typename T = std::monostate>
+IO<T> delay_for(boost::asio::io_context& ioc,
+                std::chrono::milliseconds duration) {
+  return IO<T>([&ioc, duration](auto cb) {
+    auto timer = std::make_shared<boost::asio::steady_timer>(ioc, duration);
+    timer->async_wait([timer, cb](const boost::system::error_code& ec) {
+      if (ec) {
+        cb(Error{1, "Timer error: " + ec.message()});
+      } else {
+        if constexpr (std::is_same_v<T, std::monostate>)
+          cb(std::monostate{});
+        else
+          cb(T{});  // default construct T
+      }
+    });
+  });
+}
+
+template <typename T>
+IO<std::decay_t<T>> delay_then(boost::asio::io_context& ioc,
+                               std::chrono::milliseconds duration, T&& val) {
+  using U = std::decay_t<T>;
+  return delay_for<U>(ioc, duration).map([val = std::forward<T>(val)](auto) {
+    return val;
+  });
 }
 
 }  // namespace monad
