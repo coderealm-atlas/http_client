@@ -29,6 +29,7 @@ namespace ssl = boost::asio::ssl;
 namespace urls = boost::urls;
 namespace trivial = boost::log::trivial;
 namespace logsrc = boost::log::sources;
+using tcp = net::ip::tcp;
 
 namespace client_async {
 

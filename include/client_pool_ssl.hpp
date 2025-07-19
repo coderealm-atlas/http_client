@@ -1,17 +1,19 @@
 #pragma once
 
 #include <memory>
+#include <boost/asio.hpp>
 
 #include "client_ssl_ctx.hpp"
-// #include "explicit_instantiations.hpp"
 #include "http_session.hpp"
+
+namespace asio = boost::asio;
 
 namespace client_async {
 
 class ClientPoolSsl {
  private:
   // The io_context is required for all I/O
-  std::unique_ptr<net::io_context> ioc;
+  std::unique_ptr<asio::io_context> ioc;
   // The SSL context is required, and holds certificates
   cjj365::ClientSSLContextWrapper& client_ssl_ctx;
   int threads_;
@@ -24,7 +26,7 @@ class ClientPoolSsl {
   ClientPoolSsl(cjj365::ClientSSLContextWrapper& ctx) : client_ssl_ctx(ctx) {}
 
   ClientPoolSsl& start(int threads = 2) {
-    ioc = std::make_unique<net::io_context>(threads);
+    ioc = std::make_unique<asio::io_context>(threads);
     work_guard = std::make_unique<boost::asio::executor_work_guard<
         boost::asio::io_context::executor_type>>(
         boost::asio::make_work_guard(*ioc));
