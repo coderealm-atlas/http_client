@@ -55,14 +55,15 @@ MyResult<json::value> consume_value_at(json::value&& val, std::string_view k1) {
        .what = std::format("Expect object but not an object. body: {}",
                            json::serialize(val))});
 }
-MyResult<std::reference_wrapper<json::value>> reference_value_at(
-    json::value& val, std::string_view k1) {
+MyResult<std::reference_wrapper<const json::value>> reference_value_at(
+    const json::value& val, std::string_view k1) {
   if (auto* ob_p = val.if_object()) {
     if (auto* k1_p = ob_p->if_contains(k1)) {
-      return MyResult<std::reference_wrapper<json::value>>::Ok(std::ref(*k1_p));
+      return MyResult<std::reference_wrapper<const json::value>>::Ok(
+          std::cref(*k1_p));
     }
   }
-  return MyResult<std::reference_wrapper<json::value>>::Err(
+  return MyResult<std::reference_wrapper<const json::value>>::Err(
       {.code = 1,
        .what = std::format("Expect object but not an object. body: {}",
                            json::serialize(val))});
