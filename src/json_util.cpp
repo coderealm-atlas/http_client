@@ -13,8 +13,8 @@
 #include "result_monad.hpp"
 
 namespace jsonutil {
-MyResult<json::object> expect_object_at(json::value&& val,
-                                        std::string_view k1) {
+MyResult<json::object> consume_object_at(json::value&& val,
+                                         std::string_view k1) {
   if (auto* ob_p = val.if_object()) {
     if (auto* k1_p = ob_p->if_contains(k1)) {
       if (auto* k1_o_p = k1_p->if_object()) {
@@ -28,13 +28,41 @@ MyResult<json::object> expect_object_at(json::value&& val,
                            json::serialize(val))});
 }
 
-MyResult<json::value> expect_value_at(json::value&& val, std::string_view k1) {
+MyResult<std::reference_wrapper<json::object>> reference_object_at(
+    json::value&& val, std::string_view k1) {
+  if (auto* ob_p = val.if_object()) {
+    if (auto* k1_p = ob_p->if_contains(k1)) {
+      if (auto* k1_o_p = k1_p->if_object()) {
+        return MyResult<std::reference_wrapper<json::object>>::Ok(
+            std::ref(*k1_o_p));
+      }
+    }
+  }
+  return MyResult<std::reference_wrapper<json::object>>::Err(
+      {.code = 1,
+       .what = std::format("Expect object but not an object. body: {}",
+                           json::serialize(val))});
+}
+
+MyResult<json::value> consume_value_at(json::value&& val, std::string_view k1) {
   if (auto* ob_p = val.if_object()) {
     if (auto* k1_p = ob_p->if_contains(k1)) {
       return MyResult<json::value>::Ok(std::move(*k1_p));
     }
   }
   return MyResult<json::value>::Err(
+      {.code = 1,
+       .what = std::format("Expect object but not an object. body: {}",
+                           json::serialize(val))});
+}
+MyResult<std::reference_wrapper<json::value>> reference_value_at(
+    json::value& val, std::string_view k1) {
+  if (auto* ob_p = val.if_object()) {
+    if (auto* k1_p = ob_p->if_contains(k1)) {
+      return MyResult<std::reference_wrapper<json::value>>::Ok(std::ref(*k1_p));
+    }
+  }
+  return MyResult<std::reference_wrapper<json::value>>::Err(
       {.code = 1,
        .what = std::format("Expect object but not an object. body: {}",
                            json::serialize(val))});

@@ -11,7 +11,9 @@ namespace jsonutil {
 
 using monad::MyResult;
 
-MyResult<json::object> expect_object_at(json::value&& val, std::string_view k1);
+
+MyResult<json::object> consume_object_at(json::value&& val, std::string_view k1);
+MyResult<std::reference_wrapper<json::object>> reference_object_at(json::value&& val, std::string_view k1);
 
 MyResult<json::object> expect_object_at(json::value&& val, std::string_view k1,
                                         std::string_view k2);
@@ -20,7 +22,10 @@ MyResult<json::object> expect_object_at(json::value&& val, std::string_view k1,
                                         std::string_view k3);
 monad::MyVoidResult expect_true_at(const json::value& val, std::string_view k1);
 
-MyResult<json::value> expect_value_at(json::value&& val, std::string_view k1);
+MyResult<json::value> consume_value_at(json::value&& val, std::string_view k1);
+
+MyResult<std::reference_wrapper<json::value>> reference_value_at(
+    json::value& val, std::string_view k1);
 
 bool could_be_uint64(const json::value& jv, uint64_t& out_value);
 MyResult<uint64_t> to_uint64(const json::value& jv);
