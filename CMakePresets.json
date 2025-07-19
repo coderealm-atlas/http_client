@@ -132,6 +132,30 @@
       }
     },
     {
+      "name": "debug-t630",
+      "inherits": "default",
+      "description": "Debug build t630",
+      "environment": {
+        "ASAN_OPTIONS": "allocator_may_return_null=1",
+        "CMAKE_BUILD_PARALLEL_LEVEL": "36",
+        "CMAKE_MAKE_PROGRAM": "colormake",
+        "VCPKG_DEFAULT_BINARY_CACHE": "/home/jianglibo/vcpkg-dir/vcpkg_binary_cache"
+      },
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "ENABLE_ASAN": "OFF",
+        "VCPKG_TARGET_TRIPLET": "x64-linux-cpp20",
+        "CMAKE_TOOLCHAIN_FILE": "/home/jianglibo/vcpkg-dir/vcpkg/scripts/buildsystems/vcpkg.cmake",
+        "CMAKE_C_COMPILER_LAUNCHER": "ccache",
+        "CMAKE_CXX_COMPILER_LAUNCHER": "ccache",
+        "CMAKE_CUDA_COMPILER_LAUNCHER": "ccache",
+        "CMAKE_CXX_COMPILER": "/usr/bin/clang++",
+        "CMAKE_C_COMPILER": "/usr/bin/clang",
+        "THREADS_PREFER_PTHREAD_FLAG": "ON",
+        "CMAKE_EXE_LINKER_FLAGS": "-fuse-ld=lld -pthread"
+      }
+    },
+    {
       "name": "debug-asan",
       "inherits": "default",
       "description": "Debug build",
@@ -192,6 +216,10 @@
       "name": "default",
       "hidden": true,
       "configurePreset": "default"
+    },
+    {
+      "name": "debug-t630",
+      "configurePreset": "debug-t630"
     },
     {
       "name": "release",

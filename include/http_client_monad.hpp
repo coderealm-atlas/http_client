@@ -64,6 +64,12 @@ struct HttpExchange {
     }
   }
 
+  bool is_2xx() {
+    if (!response.has_value()) return false;
+    auto status = response->result_int();
+    return (status >= 200 && status < 300);
+  }
+
   void addRequestHeaders(
       const std::vector<std::pair<std::string, std::string>>& headers) {
     for (const auto& [name, value] : headers) {

@@ -12,9 +12,6 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 set(CMAKE_PCH_ENABLE OFF)
 
 include(cmake/CPM.cmake)
-find_package(Git REQUIRED)
-find_package(Threads REQUIRED)
-find_package(OpenSSL REQUIRED)
 
 # ---------------- Version from Git ----------------
 execute_process(
@@ -101,6 +98,10 @@ if(CMAKE_CXX_COMPILER_ID MATCHES "Clang" AND NOT MSVC)
     set(OpenMP_CXX_LIB_NAMES "omp")
     set(OpenMP_omp_LIBRARY omp)
 endif()
+
+find_package(Git REQUIRED)
+find_package(Threads REQUIRED)
+find_package(OpenSSL REQUIRED)
 
 
 # ---------------- Definitions and Flags ----------------
