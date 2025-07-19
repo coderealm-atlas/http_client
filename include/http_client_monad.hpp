@@ -228,6 +228,8 @@ monad::
 
     if constexpr (std::is_same_v<Tag, GetStatusTag>) {
       make_exchange({http::verb::head, DEFAULT_TARGET, 11});
+    } else if constexpr (std::is_same_v<Tag, GetHeaderTag>) {
+      make_exchange({http::verb::head, DEFAULT_TARGET, 11});
     } else if constexpr (std::is_same_v<Tag, GetStringTag>) {
       make_exchange({http::verb::get, DEFAULT_TARGET, 11});
     } else if constexpr (std::is_same_v<Tag, PostJsonTag>) {
