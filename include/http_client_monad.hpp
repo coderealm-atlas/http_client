@@ -70,6 +70,12 @@ struct HttpExchange {
     return (status >= 200 && status < 300);
   }
 
+  bool not_2xx() {
+    if (!response.has_value()) return true;
+    auto status = response->result_int();
+    return (status < 200 || status >= 300);
+  }
+
   void addRequestHeaders(
       const std::vector<std::pair<std::string, std::string>>& headers) {
     for (const auto& [name, value] : headers) {
