@@ -68,7 +68,7 @@ struct HttpExchange {
     if (!response.has_value()) {
       return MyVoidResult::Err(Error{400, "Response is not available"});
     }
-    auto status = response->result_int();
+    int status = static_cast<int>(response->result_int());
     if (status < 200 || status >= 300) {
       return MyVoidResult::Err(
           Error{status, std::format("Expected 2xx response, got {}", status)});
