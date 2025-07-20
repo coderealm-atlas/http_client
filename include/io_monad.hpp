@@ -229,11 +229,13 @@ class IO {
     return std::move(*this).timeout(ioc, duration);
   }
 
-  // Exponential backoff retry (IO<T>)
-  IO<T> retry_exponential(int max_attempts,
-                          std::chrono::milliseconds initial_delay,
-                          boost::asio::io_context& ioc) && {
+  // Conditional exponential backoff retry (IO<T>)
+  IO<T> retry_exponential_if(
+      int max_attempts, std::chrono::milliseconds initial_delay,
+      boost::asio::io_context& ioc,
+      std::function<bool(const Error&)> should_retry) && {
     return IO<T>([max_attempts, initial_delay, ioc_ptr = &ioc,
+                  should_retry = std::move(should_retry),
                   self_ptr = std::make_shared<IO<T>>(std::move(*this))](
                      auto cb) mutable {
       auto attempt = std::make_shared<int>(0);
@@ -243,7 +245,8 @@ class IO {
       *try_run = [=](std::chrono::milliseconds current_delay) mutable {
         (*attempt)++;
         self_ptr->clone().run([=](auto r) mutable {
-          if (r.is_ok() || *attempt >= max_attempts) {
+          if (r.is_ok() || *attempt >= max_attempts || !r.is_err() ||
+              !should_retry(r.error())) {
             cb(std::move(r));
           } else {
             delay_for(*ioc_ptr, current_delay).run([=](auto) mutable {
@@ -256,6 +259,41 @@ class IO {
       (*try_run)(initial_delay);
     });
   }
+
+  IO<T> retry_exponential(int max_attempts,
+                          std::chrono::milliseconds initial_delay,
+                          boost::asio::io_context& ioc) && {
+    return std::move(*this).retry_exponential_if(
+        max_attempts, initial_delay, ioc, [](const Error&) { return true; });
+  }
+
+  // // Exponential backoff retry (IO<T>)
+  // IO<T> retry_exponential(int max_attempts,
+  //                         std::chrono::milliseconds initial_delay,
+  //                         boost::asio::io_context& ioc) && {
+  //   return IO<T>([max_attempts, initial_delay, ioc_ptr = &ioc,
+  //                 self_ptr = std::make_shared<IO<T>>(std::move(*this))](
+  //                    auto cb) mutable {
+  //     auto attempt = std::make_shared<int>(0);
+  //     auto try_run =
+  //         std::make_shared<std::function<void(std::chrono::milliseconds)>>();
+
+  //     *try_run = [=](std::chrono::milliseconds current_delay) mutable {
+  //       (*attempt)++;
+  //       self_ptr->clone().run([=](auto r) mutable {
+  //         if (r.is_ok() || *attempt >= max_attempts) {
+  //           cb(std::move(r));
+  //         } else {
+  //           delay_for(*ioc_ptr, current_delay).run([=](auto) mutable {
+  //             (*try_run)(current_delay * 2);
+  //           });
+  //         }
+  //       });
+  //     };
+
+  //     (*try_run)(initial_delay);
+  //   });
+  // }
 
   void run(Callback cb) const { thunk_(std::move(cb)); }
 
@@ -398,11 +436,12 @@ class IO<void> {
         });
   }
 
-  // Exponential backoff retry (IO<void>)
-  IO<void> retry_exponential(int max_attempts,
-                             std::chrono::milliseconds initial_delay,
-                             boost::asio::io_context& ioc) && {
+  IO<void> retry_exponential_if(
+      int max_attempts, std::chrono::milliseconds initial_delay,
+      boost::asio::io_context& ioc,
+      std::function<bool(const Error&)> should_retry) && {
     return IO<void>([max_attempts, initial_delay, ioc_ptr = &ioc,
+                     should_retry = std::move(should_retry),
                      self_ptr = std::make_shared<IO<void>>(std::move(*this))](
                         auto cb) mutable {
       auto attempt = std::make_shared<int>(0);
@@ -412,7 +451,8 @@ class IO<void> {
       *try_run = [=](std::chrono::milliseconds current_delay) mutable {
         (*attempt)++;
         self_ptr->clone().run([=](auto r) mutable {
-          if (r.is_ok() || *attempt >= max_attempts) {
+          if (r.is_ok() || *attempt >= max_attempts ||
+              !should_retry(r.error())) {
             cb(std::move(r));
           } else {
             delay_for(*ioc_ptr, current_delay).run([=](auto) mutable {
@@ -425,6 +465,42 @@ class IO<void> {
       (*try_run)(initial_delay);
     });
   }
+
+  IO<void> retry_exponential(int max_attempts,
+                             std::chrono::milliseconds initial_delay,
+                             boost::asio::io_context& ioc) && {
+    return std::move(*this).retry_exponential_if(
+        max_attempts, initial_delay, ioc, [](const Error&) { return true; });
+  }
+
+  // // Exponential backoff retry (IO<void>)
+  // IO<void> retry_exponential(int max_attempts,
+  //                            std::chrono::milliseconds initial_delay,
+  //                            boost::asio::io_context& ioc) && {
+  //   return IO<void>([max_attempts, initial_delay, ioc_ptr = &ioc,
+  //                    self_ptr =
+  //                    std::make_shared<IO<void>>(std::move(*this))](
+  //                       auto cb) mutable {
+  //     auto attempt = std::make_shared<int>(0);
+  //     auto try_run =
+  //         std::make_shared<std::function<void(std::chrono::milliseconds)>>();
+
+  //     *try_run = [=](std::chrono::milliseconds current_delay) mutable {
+  //       (*attempt)++;
+  //       self_ptr->clone().run([=](auto r) mutable {
+  //         if (r.is_ok() || *attempt >= max_attempts) {
+  //           cb(std::move(r));
+  //         } else {
+  //           delay_for(*ioc_ptr, current_delay).run([=](auto) mutable {
+  //             (*try_run)(current_delay * 2);
+  //           });
+  //         }
+  //       });
+  //     };
+
+  //     (*try_run)(initial_delay);
+  //   });
+  // }
 
   void run(Callback cb) const { thunk_(std::move(cb)); }
 

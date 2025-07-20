@@ -12,6 +12,7 @@
 #include <boost/process/v2/detail/config.hpp>
 #include <boost/smart_ptr/intrusive_ref_counter.hpp>
 #include <boost/url/detail/config.hpp>
+#include <cmath>
 #include <cstdlib>
 #include <stdexcept>
 #include <string>
@@ -338,6 +339,54 @@ TEST(DelayTest, retry) {
   });
 
   ioc.run();
+  EXPECT_TRUE(called);
+}
+
+TEST(DelayTest, retry_if) {
+  boost::asio::io_context ioc;
+  int count = 0;
+  auto io =
+      IO<int>::fail(Error{1, "initial failure"})
+          .map_err([&count](Error e) {
+            count++;
+            return Error{e.code, "retry #" + std::to_string(count)};
+          })
+          .retry_exponential_if(3, std::chrono::milliseconds(500), ioc,
+                                [](const Error& e) { return e.code == 1; });
+
+  bool called = false;
+  io.run([&called](IO<int>::IOResult result) {
+    ASSERT_TRUE(result.is_err());
+    EXPECT_EQ(result.error().code, 1);
+    called = true;
+  });
+
+  ioc.run();
+  EXPECT_EQ(count, 3);  // Should retry 3 times
+  EXPECT_TRUE(called);
+}
+
+TEST(DelayTest, retry_if_1) {
+  boost::asio::io_context ioc;
+  int count = 0;
+  auto io =
+      IO<int>::fail(Error{1, "initial failure"})
+          .map_err([&count](Error e) {
+            count++;
+            return Error{e.code, "retry #" + std::to_string(count)};
+          })
+          .retry_exponential_if(3, std::chrono::milliseconds(500), ioc,
+                                [](const Error& e) { return e.code == 2; });
+
+  bool called = false;
+  io.run([&called](IO<int>::IOResult result) {
+    ASSERT_TRUE(result.is_err());
+    EXPECT_EQ(result.error().code, 1);
+    called = true;
+  });
+
+  ioc.run();
+  EXPECT_EQ(count, 1);  // Should retry 3 times
   EXPECT_TRUE(called);
 }
 
