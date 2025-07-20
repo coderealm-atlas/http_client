@@ -64,6 +64,7 @@ class IOutput {
 
   virtual std::ostream& stream() = 0;      // For direct access if needed
   virtual std::ostream& err_stream() = 0;  // For direct access if needed
+  virtual size_t verbosity() const = 0;    // Get current verbosity level
   virtual ~IOutput() = default;
 };
 
@@ -98,6 +99,7 @@ class ConsoleOutput : public IOutput {
   }
   std::ostream& stream() override { return std::cout; }
   std::ostream& err_stream() override { return std::cerr; }
+  size_t verbosity() const override { return verbosity_; }
 };
 
 /**
@@ -133,6 +135,7 @@ class OsstringOutput : public IOutput {
   std::ostream& err_stream() override { return os_; }
 
   std::string str() const { return os_.str(); }
+  size_t verbosity() const override { return verbosity_; }
 
   void clear() {
     os_.str("");
@@ -179,6 +182,7 @@ class FileOutput : public IOutput {
 
   std::ostream& stream() override { return ofs_; }
   std::ostream& err_stream() override { return ofs_; }
+  size_t verbosity() const override { return verbosity_; }
 };
 
 }  // namespace customio
