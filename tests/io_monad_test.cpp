@@ -34,43 +34,43 @@ struct NonCopyable {
 };
 
 TEST(IOMonadTest, PureSuccess) {
-  IO<int>::pure(42).run([](IO<int>::Result result) {
-    ASSERT_TRUE(std::holds_alternative<int>(result));
-    EXPECT_EQ(std::get<int>(result), 42);
+  IO<int>::pure(42).run([](IO<int>::IOResult result) {
+    ASSERT_TRUE(result.is_ok());
+    EXPECT_EQ(result.value(), 42);
   });
 }
 
 TEST(IOMonadTest, FailError) {
-  IO<int>::fail(Error{1, "fail"}).run([](IO<int>::Result result) {
-    ASSERT_TRUE(std::holds_alternative<Error>(result));
-    EXPECT_EQ(std::get<Error>(result).code, 1);
+  IO<int>::fail(Error{1, "fail"}).run([](IO<int>::IOResult result) {
+    ASSERT_TRUE(result.is_err());
+    EXPECT_EQ(result.error().code, 1);
   });
 }
 
 TEST(IOMonadTest, MapSuccess) {
   IO<int>::pure(3)
       .map([](int x) { return x + 4; })
-      .run([](IO<int>::Result result) {
-        ASSERT_TRUE(std::holds_alternative<int>(result));
-        EXPECT_EQ(std::get<int>(result), 7);
+      .run([](IO<int>::IOResult result) {
+        ASSERT_TRUE(result.is_ok());
+        EXPECT_EQ(result.value(), 7);
       });
 }
 
 TEST(IOMonadTest, MapThrows) {
   IO<int>::pure(1)
       .map([](int) -> int { throw std::runtime_error("map failed"); })
-      .run([](IO<int>::Result result) {
-        ASSERT_TRUE(std::holds_alternative<Error>(result));
-        EXPECT_EQ(std::get<Error>(result).code, -1);
+      .run([](IO<int>::IOResult result) {
+        ASSERT_TRUE(result.is_err());
+        EXPECT_EQ(result.error().code, -1);
       });
 }
 
 TEST(IOMonadTest, ThenSuccess) {
   IO<std::string>::pure("abc")
       .then([](std::string s) { return IO<int>::pure((int)s.size()); })
-      .run([](IO<int>::Result result) {
-        ASSERT_TRUE(std::holds_alternative<int>(result));
-        EXPECT_EQ(std::get<int>(result), 3);
+      .run([](IO<int>::IOResult result) {
+        ASSERT_TRUE(result.is_ok());
+        EXPECT_EQ(result.value(), 3);
       });
 }
 
@@ -78,49 +78,45 @@ TEST(IOMonadTest, CatchThenRecover) {
   IO<std::string>::fail(Error{404, "not found"})
       .catch_then(
           [](const Error& e) { return IO<std::string>::pure("recovered"); })
-      .run([](IO<std::string>::Result result) {
-        ASSERT_TRUE(std::holds_alternative<std::string>(result));
-        EXPECT_EQ(std::get<std::string>(result), "recovered");
+      .run([](IO<std::string>::IOResult result) {
+        ASSERT_TRUE(result.is_ok());
+        EXPECT_EQ(result.value(), "recovered");
       });
 }
 
 TEST(IOMonadTest, VoidPureAndMap) {
-  IO<void>::pure().map([]() { SUCCEED(); }).run([](IO<void>::Result result) {
-    ASSERT_TRUE(std::holds_alternative<std::monostate>(result));
+  IO<void>::pure().map([]() { SUCCEED(); }).run([](IO<void>::IOResult result) {
+    ASSERT_TRUE(result.is_ok());
   });
 }
 
 TEST(IOMonadTest, VoidThenChain) {
   IO<void>::pure()
       .then([]() { return IO<void>::pure(); })
-      .run([](IO<void>::Result result) {
-        ASSERT_TRUE(std::holds_alternative<std::monostate>(result));
-      });
+      .run([](IO<void>::IOResult result) { ASSERT_TRUE(result.is_ok()); });
 }
 
 TEST(IOMonadTest, VoidCatchThen) {
   IO<void>::fail(Error{100, "void fail"})
       .catch_then([](const Error&) { return IO<void>::pure(); })
-      .run([](IO<void>::Result result) {
-        ASSERT_TRUE(std::holds_alternative<std::monostate>(result));
-      });
+      .run([](IO<void>::IOResult result) { ASSERT_TRUE(result.is_ok()); });
 }
 
 TEST(IOMonadTest, NonCopyableSupport) {
   IO<NonCopyable>::pure(NonCopyable{10})
       .map([](NonCopyable nc) { return nc.value + 5; })
-      .run([](IO<int>::Result result) {
-        ASSERT_TRUE(std::holds_alternative<int>(result));
-        EXPECT_EQ(std::get<int>(result), 15);
+      .run([](IO<int>::IOResult result) {
+        ASSERT_TRUE(result.is_ok());
+        EXPECT_EQ(result.value(), 15);
       });
 }
 
 TEST(IOMonadTest, MapErrTransformsError) {
   IO<int>::fail(Error{404, "not found"})
       .map_err([](Error e) { return Error{e.code + 1, "handled: " + e.what}; })
-      .run([](IO<int>::Result result) {
-        ASSERT_TRUE(std::holds_alternative<Error>(result));
-        const auto& err = std::get<Error>(result);
+      .run([](IO<int>::IOResult result) {
+        ASSERT_TRUE(result.is_err());
+        const auto& err = result.error();
         EXPECT_EQ(err.code, 405);
         EXPECT_EQ(err.what, "handled: not found");
       });
@@ -132,9 +128,9 @@ TEST(IOMonadTest, MapErrDoesNothingOnSuccess) {
         ADD_FAILURE() << "map_err should not be called on success";
         return e;
       })
-      .run([](IO<int>::Result result) {
-        ASSERT_TRUE(std::holds_alternative<int>(result));
-        EXPECT_EQ(std::get<int>(result), 99);
+      .run([](IO<int>::IOResult result) {
+        ASSERT_TRUE(result.is_ok());
+        EXPECT_EQ(result.value(), 99);
       });
 }
 
@@ -143,9 +139,9 @@ TEST(IOMonadTest, FinallyCalledOnSuccess) {
 
   IO<std::string>::pure("ok")
       .finally([&]() { called = true; })
-      .run([](IO<std::string>::Result result) {
-        ASSERT_TRUE(std::holds_alternative<std::string>(result));
-        EXPECT_EQ(std::get<std::string>(result), "ok");
+      .run([](IO<std::string>::IOResult result) {
+        ASSERT_TRUE(result.is_ok());
+        EXPECT_EQ(result.value(), "ok");
       });
 
   EXPECT_TRUE(called);
@@ -156,9 +152,9 @@ TEST(IOMonadTest, FinallyCalledOnError) {
 
   IO<int>::fail(Error{123, "failure"})
       .finally([&]() { called = true; })
-      .run([](IO<int>::Result result) {
-        ASSERT_TRUE(std::holds_alternative<Error>(result));
-        EXPECT_EQ(std::get<Error>(result).code, 123);
+      .run([](IO<int>::IOResult result) {
+        ASSERT_TRUE(result.is_err());
+        EXPECT_EQ(result.error().code, 123);
       });
 
   EXPECT_TRUE(called);
@@ -167,10 +163,10 @@ TEST(IOMonadTest, FinallyCalledOnError) {
 TEST(IOMonadTest, VoidMapErrWorks) {
   IO<void>::fail(Error{888, "bad"})
       .map_err([](Error e) { return Error{e.code + 1, "wrapped: " + e.what}; })
-      .run([](IO<void>::Result result) {
-        ASSERT_TRUE(std::holds_alternative<Error>(result));
-        EXPECT_EQ(std::get<Error>(result).code, 889);
-        EXPECT_EQ(std::get<Error>(result).what, "wrapped: bad");
+      .run([](IO<void>::IOResult result) {
+        ASSERT_TRUE(result.is_err());
+        EXPECT_EQ(result.error().code, 889);
+        EXPECT_EQ(result.error().what, "wrapped: bad");
       });
 }
 
@@ -179,9 +175,7 @@ TEST(IOMonadTest, VoidFinallyAlwaysCalled) {
 
   IO<void>::fail(Error{2, "err"})
       .finally([&]() { called = true; })
-      .run([](IO<void>::Result result) {
-        ASSERT_TRUE(std::holds_alternative<Error>(result));
-      });
+      .run([](IO<void>::IOResult result) { ASSERT_TRUE(result.is_err()); });
 
   EXPECT_TRUE(called);
 }
@@ -306,8 +300,8 @@ TEST(DelayTest, delay_for) {
   auto io = delay_for<>(ioc, std::chrono::milliseconds(100));
 
   bool called = false;
-  io.run([&called](IO<void>::Result result) {
-    ASSERT_TRUE(std::holds_alternative<std::monostate>(result));
+  io.run([&called](IO<void>::IOResult result) {
+    ASSERT_TRUE(result.is_ok());
     called = true;
   });
 
@@ -323,11 +317,71 @@ TEST(DelayTest, delay_then) {
   });
   bool called = false;
   io.run([&called](auto result) {
-    ASSERT_TRUE(std::holds_alternative<std::string>(result));
-    EXPECT_EQ(std::get<std::string>(result), "hello");
+    ASSERT_TRUE(result.is_ok());
+    EXPECT_EQ(result.value(), "hello");
     called = true;
   });
   ioc.run();
+  EXPECT_TRUE(called);
+}
+TEST(DelayTest, retry) {
+  boost::asio::io_context ioc;
+  auto io = IO<int>::fail(Error{1, "initial failure"})
+                .retry_exponential(3, std::chrono::milliseconds(500), ioc);
+
+  bool called = false;
+  io.run([&called](IO<int>::IOResult result) {
+    ASSERT_TRUE(result.is_err());
+    EXPECT_EQ(result.error().code, 1);
+    called = true;
+  });
+
+  ioc.run();
+  EXPECT_TRUE(called);
+}
+
+TEST(IOTest, NonCopyableThunkFailsToClone) {
+  struct NonCopyable {
+    NonCopyable() = default;
+    NonCopyable(const NonCopyable&) = delete;
+    NonCopyable& operator=(const NonCopyable&) = delete;
+
+    NonCopyable(NonCopyable&&) noexcept = default;
+    NonCopyable& operator=(NonCopyable&&) noexcept = default;
+  };
+
+  NonCopyable nc;
+
+  boost::asio::io_context ioc;
+  auto nc_ptr =
+      std::make_shared<NonCopyable>(std::move(nc));  // move once to heap
+
+  auto io = IO<int>([nc_ptr](IO<int>::Callback cb) {
+              cb(IO<int>::IOResult::Err(
+                  {.code = 42, .what = "NonCopyable thunk failed"}));
+            }).retry_exponential(3, std::chrono::milliseconds(500), ioc);
+
+  // ✅ this will compile and run, but now the lambda is copyable due to
+  // shared_ptr
+
+  // ❌ If we do this instead:
+  /*
+  auto io = IO<int>([nc = std::move(nc)](IO<int>::Callback cb) {
+    cb(IO<int>::IOResult::Ok(42));
+  });
+  */
+  // It won't compile because `nc` can't be moved in capture from local var
+
+  bool called = false;
+  io.run([&](IO<int>::IOResult result) {
+    EXPECT_TRUE(result.is_err());
+    EXPECT_EQ(result.error().code, 42);
+    EXPECT_EQ(result.error().what, "NonCopyable thunk failed");
+    called = true;
+  });
+
+  ioc.run();
+
   EXPECT_TRUE(called);
 }
 
