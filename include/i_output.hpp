@@ -61,17 +61,21 @@ class IOutput {
   virtual PrefixedStream info() = 0;
   virtual PrefixedStream warning() = 0;
   virtual PrefixedStream error() = 0;
+
+  virtual std::ostream& stream() = 0;      // For direct access if needed
+  virtual std::ostream& err_stream() = 0;  // For direct access if needed
   virtual ~IOutput() = default;
 };
 
 /**
  * default verbosity is 1, silent is 0.
  */
-class StdErrOutput : public IOutput {
+class ConsoleOutput : public IOutput {
   size_t verbosity_{0};
+  std::ostream& os_ = std::cerr;  // Default output stream
 
  public:
-  StdErrOutput(size_t verbosity) : verbosity_(verbosity) {}
+  ConsoleOutput(size_t verbosity) : verbosity_(verbosity) {}
 
   PrefixedStream trace() override {
     return PrefixedStream(std::cerr, "[trace]: ",
@@ -92,6 +96,8 @@ class StdErrOutput : public IOutput {
   PrefixedStream error() override {
     return PrefixedStream(std::cerr, "[error]: ", verbosity_ > 0);
   }
+  std::ostream& stream() override { return std::cout; }
+  std::ostream& err_stream() override { return std::cerr; }
 };
 
 /**
@@ -122,6 +128,9 @@ class OsstringOutput : public IOutput {
   PrefixedStream error() override {
     return PrefixedStream(os_, "[error]: ", verbosity_ > 0);
   }
+
+  std::ostream& stream() override { return os_; }
+  std::ostream& err_stream() override { return os_; }
 
   std::string str() const { return os_.str(); }
 
@@ -167,6 +176,9 @@ class FileOutput : public IOutput {
   PrefixedStream error() override {
     return PrefixedStream(ofs_, "[error]: ", verbosity_ > 0);
   }
+
+  std::ostream& stream() override { return ofs_; }
+  std::ostream& err_stream() override { return ofs_; }
 };
 
 }  // namespace customio
