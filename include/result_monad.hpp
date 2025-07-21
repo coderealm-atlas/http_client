@@ -103,6 +103,36 @@ class Result {
     return Ret::Ok(std::move(value()));
   }
 
+  // Return the value if ok, otherwise return the provided default
+  T value_or(const T& default_value) const {
+    return is_ok() ? value() : default_value;
+  }
+
+  // Return the value if ok, otherwise compute fallback via function
+  template <typename F>
+  T value_or_else(F&& fallback_fn) const {
+    return is_ok() ? value() : std::invoke(std::forward<F>(fallback_fn));
+  }
+
+  // map_err: Transform the error, if present, to a new error type (const ref
+  // version)
+  template <typename F>
+  auto map_err(F&& f) const& -> Result<T, std::invoke_result_t<F, E>> {
+    using NewError = std::invoke_result_t<F, E>;
+    if (is_ok()) return Result<T, NewError>::Ok(value());
+    return Result<T, NewError>::Err(std::invoke(std::forward<F>(f), error()));
+  }
+
+  // map_err: Transform the error, if present, to a new error type (rvalue
+  // version)
+  template <typename F>
+  auto map_err(F&& f) && -> Result<T, std::invoke_result_t<F, E>> {
+    using NewError = std::invoke_result_t<F, E>;
+    if (is_ok()) return Result<T, NewError>::Ok(std::move(value()));
+    return Result<T, NewError>::Err(
+        std::invoke(std::forward<F>(f), std::move(error())));
+  }
+
   // type aliases for introspection
   using value_type = T;
   using error_type = E;
@@ -144,6 +174,24 @@ class Result<void, E> {
                   "catch_then must return Result<void,F>");
     if (is_err()) return std::invoke(f, std::move(*error_));
     return Ret::Ok();
+  }
+
+  template <typename F>
+  auto map_err(F&& f) const& -> Result<void, std::invoke_result_t<F, E>> {
+    using NewError = std::invoke_result_t<F, E>;
+    if (is_err())
+      return Result<void, NewError>::Err(
+          std::invoke(std::forward<F>(f), error()));
+    return Result<void, NewError>::Ok();
+  }
+
+  template <typename F>
+  auto map_err(F&& f) && -> Result<void, std::invoke_result_t<F, E>> {
+    using NewError = std::invoke_result_t<F, E>;
+    if (is_err())
+      return Result<void, NewError>::Err(
+          std::invoke(std::forward<F>(f), std::move(error())));
+    return Result<void, NewError>::Ok();
   }
 
   using value_type = void;

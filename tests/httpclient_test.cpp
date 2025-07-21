@@ -54,8 +54,8 @@ TEST(HttpClientTest, Pool) {
           return ex;
         })
         .run([&](auto result) {
-          if (result.is_err()) {
-            std::cerr << result.error() << "\n";
+          if (std::holds_alternative<monad::Error>(result)) {
+            std::cerr << std::get<monad::Error>(result) << "\n";
           }
           notifier.notify();
         });
@@ -74,8 +74,8 @@ TEST(HttpClientTest, Pool) {
           return ex;
         })
         .run([&](auto result) {
-          if (result.is_err()) {
-            std::cerr << result.error() << "\n";
+          if (std::holds_alternative<monad::Error>(result)) {
+            std::cerr << std::get<monad::Error>(result) << "\n";
           }
           notifier.notify();
         });
@@ -129,8 +129,8 @@ TEST(HttpClientTest, GetOnly) {
           return ex;
         })
         .run([&](auto result) {
-          if (result.is_err()) {
-            std::cerr << result.error() << "\n";
+          if (std::holds_alternative<monad::Error>(result)) {
+            std::cerr << std::get<monad::Error>(result) << "\n";
           }
           notifier.notify();
         });
@@ -182,10 +182,11 @@ TEST(HttpClientTest, PostOnly) {
           return ex;
         })
         .run([&](auto result) {
-          EXPECT_TRUE(result.is_ok())
+          EXPECT_TRUE(
+              std::holds_alternative<ExchangePtrFor<PostJsonTag>>(result))
               << "Result should be of type ExchangePtrFor<PostJsonTag>";
-          if (result.is_err()) {
-            std::cerr << result.error() << "\n";
+          if (std::holds_alternative<monad::Error>(result)) {
+            std::cerr << std::get<monad::Error>(result) << "\n";
           }
           notifier.notify();
         });
@@ -242,10 +243,11 @@ TEST(HttpClientTest, DfLogin) {
         return StringMapIO::fail(std::move(err));
       })
       .run([&](auto result) {
-        EXPECT_TRUE(result.is_ok())
+        using MapType = std::map<std::string, std::string>;
+        EXPECT_TRUE(std::holds_alternative<MapType>(result))
             << "Result should be of type std::map<std::string, std::string>";
-        if (result.is_err()) {
-          std::cerr << result.error() << "\n";
+        if (std::holds_alternative<monad::Error>(result)) {
+          std::cerr << std::get<monad::Error>(result) << "\n";
         }
         notifier.notify();
       });
