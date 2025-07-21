@@ -104,15 +104,15 @@ class Result {
   }
 
   // Return the value if ok, otherwise return the provided default
-  T value_or(const T& default_value) const {
-    return is_ok() ? value() : default_value;
-  }
+  // T value_or(const T& default_value) const {
+  //   return is_ok() ? value() : default_value;
+  // }
 
-  // Return the value if ok, otherwise compute fallback via function
-  template <typename F>
-  T value_or_else(F&& fallback_fn) const {
-    return is_ok() ? value() : std::invoke(std::forward<F>(fallback_fn));
-  }
+  // // Return the value if ok, otherwise compute fallback via function
+  // template <typename F>
+  // T value_or_else(F&& fallback_fn) const {
+  //   return is_ok() ? value() : std::invoke(std::forward<F>(fallback_fn));
+  // }
 
   // map_err: Transform the error, if present, to a new error type (const ref
   // version)
