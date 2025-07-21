@@ -2,6 +2,7 @@
 #pragma once
 
 #include <functional>
+#include <limits>
 #include <optional>
 #include <ostream>
 #include <string>
@@ -18,6 +19,8 @@ struct Error {
 inline std::ostream& operator<<(std::ostream& os, const Error& e) {
   return os << "[Error " << e.code << "] " << e.what;
 }
+
+inline static const Error JUST_AN_ERROR = {std::numeric_limits<int>::min(), ""};
 
 // Generic Result<T, E>
 template <typename T, typename E>
