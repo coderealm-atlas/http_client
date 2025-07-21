@@ -116,6 +116,47 @@ class RateLimiter {
   }
 };
 
+template <typename Key>
+class TaskDeduplicator {
+ public:
+  using Clock = std::chrono::steady_clock;
+  using TimePoint = Clock::time_point;
+  using Duration = std::chrono::seconds;
+  inline static auto DeduplicateDuration = [] {};
+
+  TaskDeduplicator(Duration ttl) : _ttl(ttl) {}
+
+  // Returns true if key is already running (not expired),
+  // otherwise marks it as running and returns false.
+  bool is_running_or_mark(const Key& key) {
+    std::lock_guard<std::mutex> lock(_mutex);
+    auto now = Clock::now();
+
+    // Evacuate expired entries
+    for (auto it = _executed.begin(); it != _executed.end();) {
+      if (now - it->second > _ttl)
+        it = _executed.erase(it);
+      else
+        ++it;
+    }
+
+    // Check if the key is already running
+    auto it = _executed.find(key);
+    if (it != _executed.end()) {
+      return true;
+    }
+
+    // Mark as running
+    _executed[key] = now;
+    return false;
+  }
+
+ private:
+  std::unordered_map<Key, TimePoint> _executed;
+  Duration _ttl;
+  std::mutex _mutex;
+};
+
 class ThreadNotifier {
  public:
   ThreadNotifier(uint64_t milliseconds = 0ull)
