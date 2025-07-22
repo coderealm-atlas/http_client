@@ -106,6 +106,11 @@ class Result {
     return Ret::Ok(std::move(value()));
   }
 
+  std::optional<T> as_optional() const {
+    if (is_ok()) return value();
+    return std::nullopt;
+  }
+
   // Return the value if ok, otherwise return the provided default
   // T value_or(const T& default_value) const {
   //   return is_ok() ? value() : default_value;
