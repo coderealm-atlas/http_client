@@ -83,4 +83,27 @@ TEST(UrlsTest, manualEncode) {
   EXPECT_EQ(std::string((*name_it).value), "电商");
 }
 
+static void set_query_param(boost::urls::url& u, std::string_view key,
+                            std::string_view value) {
+  auto params = u.params();
+  for (auto it = params.begin(); it != params.end(); ++it) {
+    if ((*it).key == key) {
+      params.replace(it, std::next(it), {{key, value}});
+      return;
+    }
+  }
+  params.insert(params.end(), {key, value});
+}
+
+TEST(UrlsTest, set_parameter) {
+  urls::url u1("https://example.com/df/table/list?name=&pageSize=10&pageNum=1");
+  set_query_param(u1, "name", "电商");
+  EXPECT_EQ(u1.query(), "name=电商&pageSize=10&pageNum=1")
+      << "Query should match the expected format";
+  std::string nv = "电商x";
+  set_query_param(u1, "name", nv);
+  EXPECT_EQ(u1.query(), "name=电商x&pageSize=10&pageNum=1")
+      << "Query should match the expected format";
+
+}  // namespace
 }  // namespace

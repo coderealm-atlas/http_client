@@ -64,6 +64,17 @@ struct HttpExchange {
     }
   }
 
+  void set_query_param(std::string_view key, std::string_view value) {
+    auto params = url.params();
+    for (auto it = params.begin(); it != params.end(); ++it) {
+      if ((*it).key == key) {
+        params.replace(it, std::next(it), {{key, value}});
+        return;
+      }
+    }
+    params.insert(params.end(), {key, value});
+  }
+
   MyVoidResult expect_2xx() {
     if (!response.has_value()) {
       return MyVoidResult::Err(Error{400, "Response is not available"});

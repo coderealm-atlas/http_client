@@ -46,6 +46,9 @@ TEST(HttpClientTest, Pool) {
     http_io<GetStatusTag>("https://example.com")
         .map([&](auto ex) {
           ex->request.set(http::field::authorization, "Bearer token");
+          ex->set_query_param("name", "world");
+          EXPECT_EQ(ex->url.query(), "name=world")
+              << "Query should match the expected format";
           return ex;
         })
         .then(http_request_io<GetStatusTag>(*http_client_))
@@ -54,8 +57,8 @@ TEST(HttpClientTest, Pool) {
           return ex;
         })
         .run([&](auto result) {
-          if (std::holds_alternative<monad::Error>(result)) {
-            std::cerr << std::get<monad::Error>(result) << "\n";
+          if (result.is_err()) {
+            std::cerr << result.error() << "\n";
           }
           notifier.notify();
         });
@@ -74,8 +77,8 @@ TEST(HttpClientTest, Pool) {
           return ex;
         })
         .run([&](auto result) {
-          if (std::holds_alternative<monad::Error>(result)) {
-            std::cerr << std::get<monad::Error>(result) << "\n";
+          if (result.is_err()) {
+            std::cerr << result.error() << "\n";
           }
           notifier.notify();
         });
@@ -129,8 +132,8 @@ TEST(HttpClientTest, GetOnly) {
           return ex;
         })
         .run([&](auto result) {
-          if (std::holds_alternative<monad::Error>(result)) {
-            std::cerr << std::get<monad::Error>(result) << "\n";
+          if (result.is_err()) {
+            std::cerr << result.error() << "\n";
           }
           notifier.notify();
         });
@@ -182,11 +185,10 @@ TEST(HttpClientTest, PostOnly) {
           return ex;
         })
         .run([&](auto result) {
-          EXPECT_TRUE(
-              std::holds_alternative<ExchangePtrFor<PostJsonTag>>(result))
+          EXPECT_TRUE(result.is_ok())
               << "Result should be of type ExchangePtrFor<PostJsonTag>";
-          if (std::holds_alternative<monad::Error>(result)) {
-            std::cerr << std::get<monad::Error>(result) << "\n";
+          if (result.is_err()) {
+            std::cerr << result.error() << "\n";
           }
           notifier.notify();
         });
@@ -244,10 +246,10 @@ TEST(HttpClientTest, DfLogin) {
       })
       .run([&](auto result) {
         using MapType = std::map<std::string, std::string>;
-        EXPECT_TRUE(std::holds_alternative<MapType>(result))
+        EXPECT_TRUE(result.is_ok())
             << "Result should be of type std::map<std::string, std::string>";
-        if (std::holds_alternative<monad::Error>(result)) {
-          std::cerr << std::get<monad::Error>(result) << "\n";
+        if (result.is_err()) {
+          std::cerr << result.error() << "\n";
         }
         notifier.notify();
       });
