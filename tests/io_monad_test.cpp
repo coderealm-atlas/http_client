@@ -14,6 +14,7 @@
 #include <boost/url/detail/config.hpp>
 #include <cmath>
 #include <cstdlib>
+#include <i_output.hpp>
 #include <stdexcept>
 #include <string>
 #include <variant>
@@ -438,100 +439,99 @@ TEST(IoutputTest, output) {
   using namespace customio;
 
   OsstringOutput silent_output(0);
-  silent_output.trace() << "This is a trace message";
+  silent_output.trace() << "This is a trace message" << std::endl;
   EXPECT_EQ(silent_output.str(), "");
   silent_output.clear();
-  silent_output.debug() << "This is a debug message";
+  silent_output.debug() << "This is a debug message" << std::endl;
   EXPECT_EQ(silent_output.str(), "");
   silent_output.clear();
-  silent_output.info() << "This is an info message";
+  silent_output.info() << "This is an info message" << std::endl;
   EXPECT_EQ(silent_output.str(), "");
   silent_output.clear();
-  silent_output.warning() << "This is a warning message";
+  silent_output.warning() << "This is a warning message" << std::endl;
   EXPECT_EQ(silent_output.str(), "");
   silent_output.clear();
-  silent_output.error() << "This is an error message";
+  silent_output.error() << "This is an error message" << std::endl;
   EXPECT_EQ(silent_output.str(), "");
 
   OsstringOutput error_output(1);
-  error_output.trace() << "This is a trace message";
+  error_output.trace() << "This is a trace message" << std::endl;
   EXPECT_EQ(error_output.str(), "");
   error_output.clear();
-  error_output.debug() << "This is a debug message";
+  error_output.debug() << "This is a debug message" << std::endl;
   EXPECT_EQ(error_output.str(), "");
   error_output.clear();
-  error_output.info() << "This is an info message";
+  error_output.info() << "This is an info message" << std::endl;
   EXPECT_EQ(error_output.str(), "");
   error_output.clear();
-  error_output.warning() << "This is a warning message";
+  error_output.warning() << "This is a warning message" << std::endl;
   EXPECT_EQ(error_output.str(), "");
   error_output.clear();
-  error_output.error() << "This is an error message";
-  EXPECT_EQ(error_output.str(), "[error]: This is an error message");
+  error_output.error() << "This is an error message" << std::endl;
+  EXPECT_EQ(error_output.str(), "[error]: This is an error message\n");
 
   OsstringOutput warning_output(2);
-  warning_output.trace() << "This is a trace message";
+  warning_output.trace() << "This is a trace message" << std::endl;
   EXPECT_EQ(warning_output.str(), "");
   warning_output.clear();
-  warning_output.debug() << "This is a debug message";
+  warning_output.debug() << "This is a debug message" << std::endl;
   EXPECT_EQ(warning_output.str(), "");
   warning_output.clear();
-  warning_output.info() << "This is an info message";
+  warning_output.info() << "This is an info message" << std::endl;
   EXPECT_EQ(warning_output.str(), "");
   warning_output.clear();
-  warning_output.warning() << "This is a warning message";
-  EXPECT_EQ(warning_output.str(), "[warning]: This is a warning message");
+  warning_output.warning() << "This is a warning message" << std::endl;
+  EXPECT_EQ(warning_output.str(), "[warning]: This is a warning message\n");
   warning_output.clear();
-  warning_output.error() << "This is an error message";
-  EXPECT_EQ(warning_output.str(), "[error]: This is an error message");
+  warning_output.error() << "This is an error message" << std::endl;
+  EXPECT_EQ(warning_output.str(), "[error]: This is an error message\n");
 
   OsstringOutput info_output(3);
-  info_output.trace() << "This is a trace message";
+  info_output.trace() << "This is a trace message" << std::endl;
   EXPECT_EQ(info_output.str(), "");
   info_output.clear();
-  info_output.debug() << "This is a debug message";
+  info_output.debug() << "This is a debug message" << std::endl;
   EXPECT_EQ(info_output.str(), "");
   info_output.clear();
-  info_output.info() << "This is an info message";
-  EXPECT_EQ(info_output.str(), "[info]: This is an info message");
+  info_output.info() << "This is an info message" << std::endl;
+  EXPECT_EQ(info_output.str(), "[info]: This is an info message\n");
   info_output.clear();
-  info_output.warning() << "This is a warning message";
-  EXPECT_EQ(info_output.str(), "[warning]: This is a warning message");
+  info_output.warning() << "This is a warning message" << std::endl;
+  EXPECT_EQ(info_output.str(), "[warning]: This is a warning message\n");
   info_output.clear();
-  info_output.error() << "This is an error message";
-  EXPECT_EQ(info_output.str(), "[error]: This is an error message");
+  info_output.error() << "This is an error message" << std::endl;
+  EXPECT_EQ(info_output.str(), "[error]: This is an error message\n");
 
   OsstringOutput debug_output(4);
-  debug_output.trace() << "This is a trace message";
+  debug_output.trace() << "This is a trace message" << std::endl;
   EXPECT_EQ(debug_output.str(), "");
   debug_output.clear();
-  debug_output.debug() << "This is a debug message";
-  EXPECT_EQ(debug_output.str(), "[debug]: This is a debug message");
+  debug_output.debug() << "This is a debug message" << std::endl;
+  EXPECT_EQ(debug_output.str(), "[debug]: This is a debug message\n");
   debug_output.clear();
-  debug_output.info() << "This is an info message";
-  EXPECT_EQ(debug_output.str(), "[info]: This is an info message");
+  debug_output.info() << "This is an info message" << std::endl;
+  EXPECT_EQ(debug_output.str(), "[info]: This is an info message\n");
   debug_output.clear();
-  debug_output.warning() << "This is a warning message";
-  EXPECT_EQ(debug_output.str(), "[warning]: This is a warning message");
+  debug_output.warning() << "This is a warning message" << std::endl;
+  EXPECT_EQ(debug_output.str(), "[warning]: This is a warning message\n");
   debug_output.clear();
-  debug_output.error() << "This is an error message";
-  EXPECT_EQ(debug_output.str(), "[error]: This is an error message");
+  debug_output.error() << "This is an error message" << std::endl;
+  EXPECT_EQ(debug_output.str(), "[error]: This is an error message\n");
 
   OsstringOutput trace_output(5);
-  trace_output.trace() << "This is a trace message";
-  EXPECT_EQ(trace_output.str(), "[trace]: This is a trace message");
+  trace_output.trace() << "This is a trace message" << std::endl;
+  EXPECT_EQ(trace_output.str(), "[trace]: This is a trace message\n");
   trace_output.clear();
-  trace_output.debug() << "This is a debug message";
-  EXPECT_EQ(trace_output.str(), "[debug]: This is a debug message");
+  trace_output.debug() << "This is a debug message" << std::endl;
+  EXPECT_EQ(trace_output.str(), "[debug]: This is a debug message\n");
   trace_output.clear();
-  trace_output.info() << "This is an info message";
-  EXPECT_EQ(trace_output.str(), "[info]: This is an info message");
+  trace_output.info() << "This is an info message" << std::endl;
+  EXPECT_EQ(trace_output.str(), "[info]: This is an info message\n");
   trace_output.clear();
-  trace_output.warning() << "This is a warning message";
-  EXPECT_EQ(trace_output.str(), "[warning]: This is a warning message");
+  trace_output.warning() << "This is a warning message" << std::endl;
+  EXPECT_EQ(trace_output.str(), "[warning]: This is a warning message\n");
   trace_output.clear();
-  trace_output.error() << "This is an error message";
-  EXPECT_EQ(trace_output.str(), "[error]: This is an error message");
+  trace_output.error() << "This is an error message" << std::endl;
+  EXPECT_EQ(trace_output.str(), "[error]: This is an error message\n");
 }
-
 }  // namespace
