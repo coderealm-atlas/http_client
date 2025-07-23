@@ -435,6 +435,15 @@ TEST(IOTest, NonCopyableThunkFailsToClone) {
 
   EXPECT_TRUE(called);
 }
+TEST(IoutputTest, outputConsole) {
+  using namespace customio;
+  std::string s = "hello";
+  std::string_view sv = s;
+  ConsoleOutput console_output(5);
+  console_output.trace() << "This is a trace message" << sv << std::endl;
+}
+
+
 TEST(IoutputTest, output) {
   using namespace customio;
 
