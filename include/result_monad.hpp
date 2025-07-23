@@ -11,6 +11,18 @@
 
 namespace monad {
 
+template <typename T>
+struct WithMessage {
+  T value;
+  std::string message;
+};
+
+// Specialization for void
+template <>
+struct WithMessage<void> {
+  std::string message;
+};
+
 struct Error {
   int code;
   std::string what;
