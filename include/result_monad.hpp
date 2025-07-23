@@ -23,6 +23,8 @@ struct WithMessage<void> {
   std::string message;
 };
 
+using WithMessageVoid = WithMessage<void>;
+
 struct Error {
   int code;
   std::string what;
