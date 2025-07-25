@@ -13,7 +13,7 @@ def parse_ini(filepath):
 def generate_header(config, filename):
     out = []
     out.append(f"// Generated from {os.path.basename(filename)}\n#pragma once\n")
-    out.append("#include <string>\n#include <ostream>\n\nnamespace error {\n")
+    out.append("#include <string>\n#include <ostream>\n\nnamespace httpclient_error {\n")
 
     # Enums
     for section in config.sections():
