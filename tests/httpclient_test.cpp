@@ -28,8 +28,7 @@ TEST(HttpClientTest, Pool) {
   cjj365::ClientSSLContextWrapper client_ssl_ctx;
 
   auto http_client_ =
-      std::make_unique<client_async::ClientPoolSsl>(client_ssl_ctx);
-  http_client_->start();
+      std::make_unique<client_async::ClientPoolSsl>(client_ssl_ctx, 2);
 
   urls::url_view url("https://example.com/hello?name=world#fragment");
   urls::url target1("/abc?");
@@ -93,8 +92,7 @@ TEST(HttpClientTest, GetOnly) {
   cjj365::ClientSSLContextWrapper client_ssl_ctx;
 
   auto http_client_ =
-      std::make_unique<client_async::ClientPoolSsl>(client_ssl_ctx);
-  http_client_->start();
+      std::make_unique<client_async::ClientPoolSsl>(client_ssl_ctx, 2);
 
   // const gatewayDomain = "gray-quick-dove-13.mypinata.cloud"
   // const cid = "bafkreihxhxdozot7mukwx4hx55bbfxxd6vtesccuzgc2qicjrxhrp3rugy"
@@ -149,8 +147,7 @@ TEST(HttpClientTest, PostOnly) {
   cjj365::ClientSSLContextWrapper client_ssl_ctx;
 
   auto http_client_ =
-      std::make_unique<client_async::ClientPoolSsl>(client_ssl_ctx);
-  http_client_->start();
+      std::make_unique<client_async::ClientPoolSsl>(client_ssl_ctx, 2);
 
   auto httpbin_url = "https://httpbin.org/post?a=b";
   {
@@ -204,8 +201,7 @@ TEST(HttpClientTest, DfLogin) {
   cjj365::ClientSSLContextWrapper client_ssl_ctx;
 
   auto http_client_ =
-      std::make_unique<client_async::ClientPoolSsl>(client_ssl_ctx);
-  http_client_->start();
+      std::make_unique<client_async::ClientPoolSsl>(client_ssl_ctx, 2);
 
   std::string base_url = "https://test.datafocus.ai";
   std::string login_url = fmt::format("{}/uc/login", base_url);
@@ -265,8 +261,7 @@ TEST(HttpClientTest, DfListTable) {
   cjj365::ClientSSLContextWrapper client_ssl_ctx;
 
   auto http_client_ =
-      std::make_unique<client_async::ClientPoolSsl>(client_ssl_ctx);
-  http_client_->start();
+      std::make_unique<client_async::ClientPoolSsl>(client_ssl_ctx, 2);
   std::string base_url = "https://test.datafocus.ai";
   // https://test.datafocus.ai/df/table/list?name=%E7%94%B5%E5%95%86&sourceType=table&projectId=&pageNum=1&pageSize=60&stickerIds=&sort=timeDesc&sources=&status=&loadTypes=
   urls::url list_url(base_url);

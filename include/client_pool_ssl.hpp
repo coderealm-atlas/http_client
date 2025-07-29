@@ -1,8 +1,9 @@
 #pragma once
 
-#include <memory>
 #include <boost/asio.hpp>
+#include <memory>
 
+#include "boost/di.hpp"
 #include "client_ssl_ctx.hpp"
 #include "http_session.hpp"
 
@@ -23,21 +24,34 @@ class ClientPoolSsl {
       work_guard;
 
  public:
-  ClientPoolSsl(cjj365::ClientSSLContextWrapper& ctx) : client_ssl_ctx(ctx) {}
-
-  ClientPoolSsl& start(int threads = 2) {
-    ioc = std::make_unique<asio::io_context>(threads);
+  inline static auto HTTPCLIENT_POOL_THREADS = [] {};
+  BOOST_DI_INJECT(ClientPoolSsl, cjj365::ClientSSLContextWrapper& ctx,
+                  (named = HTTPCLIENT_POOL_THREADS) int threads)
+      : client_ssl_ctx(ctx), threads_(threads == 0 ? 2 : threads) {
+    ioc = std::make_unique<asio::io_context>(threads_);
     work_guard = std::make_unique<boost::asio::executor_work_guard<
         boost::asio::io_context::executor_type>>(
         boost::asio::make_work_guard(*ioc));
-    threads_ = threads;
-    for (size_t i = 0; i < threads; ++i) {
+    for (size_t i = 0; i < threads_; ++i) {
       thread_pool.emplace_back([this] {
         ioc->run();  // Each thread runs the io_context
       });
     }
-    return *this;
   }
+
+  // ClientPoolSsl& start(int threads = 2) {
+  //   ioc = std::make_unique<asio::io_context>(threads);
+  //   work_guard = std::make_unique<boost::asio::executor_work_guard<
+  //       boost::asio::io_context::executor_type>>(
+  //       boost::asio::make_work_guard(*ioc));
+  //   threads_ = threads;
+  //   for (size_t i = 0; i < threads; ++i) {
+  //     thread_pool.emplace_back([this] {
+  //       ioc->run();  // Each thread runs the io_context
+  //     });
+  //   }
+  //   return *this;
+  // }
 
   void stop() {
     work_guard->reset();
