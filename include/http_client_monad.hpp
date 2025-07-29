@@ -298,7 +298,7 @@ auto http_request_io(ClientPoolSsl& pool, int verbose = 0) {
         ex->request.target(target);
       }
       Req request_copy = ex->request;  // preserve original
-      if (verbose > 0) {
+      if (verbose > 4) {               // trace
         std::cerr << "Before request headers: " << request_copy.base()
                   << std::endl;
       }
