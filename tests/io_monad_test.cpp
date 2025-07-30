@@ -20,6 +20,7 @@
 #include <variant>
 
 #include "i_output.hpp"
+#include "in_flight_counter.hpp"
 #include "io_monad.hpp"  // include your monad definition
 #include "json_util.hpp"
 
@@ -443,7 +444,6 @@ TEST(IoutputTest, outputConsole) {
   console_output.trace() << "This is a trace message" << sv << std::endl;
 }
 
-
 TEST(IoutputTest, output) {
   using namespace customio;
 
@@ -542,5 +542,15 @@ TEST(IoutputTest, output) {
   trace_output.clear();
   trace_output.error() << "This is an error message" << std::endl;
   EXPECT_EQ(trace_output.str(), "[error]: This is an error message\n");
+}
+
+TEST(InflightTest, to_zero) {
+  cjj365::InFlightCounter counter;
+  EXPECT_EQ(counter.value(), 0);
+  {
+    cjj365::InFlightCounter::Guard guard(counter);
+    EXPECT_EQ(counter.value(), 1);
+  }
+  EXPECT_EQ(counter.value(), 0);
 }
 }  // namespace
