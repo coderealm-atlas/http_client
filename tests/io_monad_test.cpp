@@ -553,4 +553,12 @@ TEST(InflightTest, to_zero) {
   }
   EXPECT_EQ(counter.value(), 0);
 }
+TEST(StopIndicatorTest, to_stop) {
+  cjj365::StopIndicator stop_indicator;
+  EXPECT_FALSE(stop_indicator.is_stopped());
+  stop_indicator.stop();
+  EXPECT_TRUE(stop_indicator.is_stopped());
+  stop_indicator.stop();  // Should be idempotent
+  EXPECT_TRUE(stop_indicator.is_stopped());
+}
 }  // namespace

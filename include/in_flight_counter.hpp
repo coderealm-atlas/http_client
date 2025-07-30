@@ -31,4 +31,13 @@ class InFlightCounter {
   };
 };
 
+struct StopIndicator {
+  std::atomic<bool> stop_requested = false;
+
+  void stop() { stop_requested.store(true, std::memory_order_relaxed); }
+  bool is_stopped() const {
+    return stop_requested.load(std::memory_order_relaxed);
+  }
+};
+
 }  // namespace cjj365
