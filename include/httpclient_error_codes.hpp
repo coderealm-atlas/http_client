@@ -10,6 +10,7 @@ constexpr int UNAUTHORIZED = 401;  // Unauthorized
 constexpr int FORBIDDEN = 403;  // Forbidden
 constexpr int NOT_FOUND = 404;  // Not Found
 constexpr int METHOD_NOT_ALLOWED = 405;  // Method Not Allowed
+constexpr int DOWNLOAD_FILE_OPEN_FAILED = 4999;  // download file open failed
 }  // namespace RESPONSE
 
 namespace NETWORK {  // Network errors

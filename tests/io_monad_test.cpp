@@ -19,6 +19,7 @@
 #include <string>
 #include <variant>
 
+#include "api_handler_base.hpp"
 #include "i_output.hpp"
 #include "in_flight_counter.hpp"
 #include "io_monad.hpp"  // include your monad definition
@@ -560,5 +561,19 @@ TEST(StopIndicatorTest, to_stop) {
   EXPECT_TRUE(stop_indicator.is_stopped());
   stop_indicator.stop();  // Should be idempotent
   EXPECT_TRUE(stop_indicator.is_stopped());
+}
+
+TEST(ApiHandlerTest, Download) {
+  monad::IO<apihandler::DownloadFile>::pure(
+      apihandler::DownloadFile{.path = "file-not-exist",
+                               .content_type = "html/text",
+                               .filename = "hello"})
+      .then(apihandler::http_response_gen_fn)
+      .run([](auto r) {
+        EXPECT_FALSE(r.is_ok());
+        if (r.is_err()) {
+          std::cerr << r.error() << std::endl;
+        }
+      });
 }
 }  // namespace
