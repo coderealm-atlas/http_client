@@ -24,6 +24,7 @@
 #include "in_flight_counter.hpp"
 #include "io_monad.hpp"  // include your monad definition
 #include "json_util.hpp"
+#include "result_monad.hpp"
 
 using namespace monad;
 
@@ -575,5 +576,19 @@ TEST(ApiHandlerTest, Download) {
           std::cerr << r.error() << std::endl;
         }
       });
+}
+
+TEST(IOMonadTest, NonCopyableCapture) {
+  NonCopyable nc(10);
+  std::shared_ptr<NonCopyable> nc_ptr =
+      std::make_shared<NonCopyable>(std::move(nc));
+  IO<int>([nc_ptr](auto&& cb) {
+    cb(MyResult<int>::Ok(nc_ptr->value));
+  }).map([](auto v) {
+      return v + 5;
+    }).run([](MyResult<int> result) {
+    ASSERT_TRUE(result.is_ok());
+    EXPECT_EQ(result.value(), 15);
+  });
 }
 }  // namespace
