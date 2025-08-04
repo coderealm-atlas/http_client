@@ -28,15 +28,15 @@ struct WithMessage<void> {
 
 using WithMessageVoid = WithMessage<void>;
 
-struct AlternativeRespBody {
-  int code;
-  json::value payload;
+struct AlternativeResp {
+  int status;
+  json::value body;
 };
 
 struct Error {
   int code;
   std::string what;
-  std::optional<AlternativeRespBody> alternative_resp_body;
+  std::optional<AlternativeResp> alternative_resp;
 
   friend void tag_invoke(const json::value_from_tag&, json::value& jv,
                          const Error& e) {
