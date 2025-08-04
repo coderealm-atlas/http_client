@@ -1,6 +1,5 @@
 #pragma once
 #include <boost/beast.hpp>
-#include <boost/beast/http.hpp>
 #include <boost/beast/http/empty_body.hpp>
 #include <boost/beast/http/file_body_fwd.hpp>
 #include <boost/beast/http/message_fwd.hpp>
@@ -21,22 +20,13 @@ struct ApiResponse {
   std::optional<resp::DataMeta> meta;
 
   // Constructors
-  template <typename U = T>
-  requires(!std::same_as<U, std::vector<T>> &&
-           !std::same_as<U, resp::ListResult<T>>)
   ApiResponse(T&& val) : data(std::move(val)) {}
-  // Deleted constructor for lvalue reference to prevent copy
-  ApiResponse(const T& val) = delete;
-
   ApiResponse(std::vector<T>&& vec)
       : data(std::move(vec)), meta(resp::DataMeta{vec.size(), 0, vec.size()}) {}
-  // Deleted constructor for lvalue reference to vector
-  ApiResponse(const std::vector<T>&) = delete;
-
   ApiResponse(resp::ListResult<T>&& result)
       : data(std::move(result.data)), meta(std::move(result.meta)) {}
 
-  ApiResponse(const resp::ListResult<T>&) = delete;
+  static ApiResponse<T> NoContent() { return ApiResponse{}; }
 
   // JSON serialization
   friend void tag_invoke(const json::value_from_tag&, json::value& jv,
@@ -93,12 +83,6 @@ auto make_io_response(Resp&& r) {
   using T = std::decay_t<Resp>;
   return monad::IO<T>::pure(std::move(r));  // enforce move
 }
-// template <typename Resp>
-// http::message_generator make_io_response(http::message_generatorResp&& r) {
-//   // using T = std::decay_t<Resp>;
-//   return monad::IO<http::message_generator>::pure(
-//       std::move(r));  // enforce move
-// }
 
 struct ResponseGenerator {
   // ApiResponse<T> → http::string_body
