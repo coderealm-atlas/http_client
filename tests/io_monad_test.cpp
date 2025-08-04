@@ -591,4 +591,19 @@ TEST(IOMonadTest, NonCopyableCapture) {
     EXPECT_EQ(result.value(), 15);
   });
 }
+
+TEST(ErrorDataTest, with_data_content) {
+  Error err{404, "Not Found"};
+  ErrorData err_data{404, json::value{"This is some data content"}};
+  err.error_data = std::make_optional(err_data);
+
+  MyVoidResult result = MyVoidResult::Err(err);
+  EXPECT_TRUE(result.is_err());
+  EXPECT_EQ(result.error().code, 404);
+  EXPECT_EQ(result.error().what, "Not Found");
+  EXPECT_TRUE(result.error().error_data.has_value());
+  EXPECT_EQ(result.error().error_data->data_content->as_string(),
+            "This is some data content");
+}
+
 }  // namespace

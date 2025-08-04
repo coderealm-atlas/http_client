@@ -1,6 +1,7 @@
 // result.hpp
 #pragma once
 
+#include <boost/json.hpp>
 #include <functional>
 #include <limits>
 #include <optional>
@@ -8,6 +9,8 @@
 #include <string>
 #include <type_traits>
 #include <variant>
+
+namespace json = boost::json;
 
 namespace monad {
 
@@ -25,9 +28,23 @@ struct WithMessage<void> {
 
 using WithMessageVoid = WithMessage<void>;
 
+struct ErrorData {
+  int code;
+  std::optional<json::value> data_content;
+};
+
 struct Error {
   int code;
   std::string what;
+  std::optional<ErrorData> error_data;
+
+  friend void tag_invoke(const json::value_from_tag&, json::value& jv,
+                         const Error& e) {
+    json::object jo;
+    jo["code"] = e.code;
+    jo["what"] = e.what;
+    jv = std::move(jo);
+  }
 };
 
 inline std::ostream& operator<<(std::ostream& os, const Error& e) {
