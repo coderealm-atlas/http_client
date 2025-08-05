@@ -28,16 +28,12 @@ struct WithMessage<void> {
 
 using WithMessageVoid = WithMessage<void>;
 
-struct AlternativeResp {
-  int status;
-  json::value body;
-  std::string content_type = "application/json";
-};
-
 struct Error {
   int code;
   std::string what;
-  std::optional<AlternativeResp> alternative_resp;
+  int status = 500;  // Default HTTP status code
+  std::string content_type = "application/json";
+  std::optional<json::value> alternative_body = std::nullopt;
 
   friend void tag_invoke(const json::value_from_tag&, json::value& jv,
                          const Error& e) {

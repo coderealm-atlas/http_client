@@ -594,16 +594,15 @@ TEST(IOMonadTest, NonCopyableCapture) {
 
 TEST(ErrorDataTest, with_data_content) {
   Error err{404, "Not Found"};
-  AlternativeResp alternative_resp_body{
-      404, json::value{"This is some data content"}};
-  err.alternative_resp = std::make_optional(alternative_resp_body);
+  json::value alternative_body{{"data", "This is some data content"}};
+  err.alternative_body = std::make_optional(alternative_body);
 
   MyVoidResult result = MyVoidResult::Err(err);
   EXPECT_TRUE(result.is_err());
   EXPECT_EQ(result.error().code, 404);
   EXPECT_EQ(result.error().what, "Not Found");
-  EXPECT_TRUE(result.error().alternative_resp.has_value());
-  EXPECT_EQ(result.error().alternative_resp->body.as_string(),
+  EXPECT_TRUE(result.error().alternative_body.has_value());
+  EXPECT_EQ(result.error().alternative_body->as_object().at("data").as_string(),
             "This is some data content");
 }
 TEST(ApiResponseTest, deleted_construct) {
