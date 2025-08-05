@@ -9,6 +9,7 @@
 #include <string>
 #include <type_traits>
 #include <variant>
+#include <format>
 
 namespace json = boost::json;
 
@@ -43,6 +44,14 @@ struct Error {
     jv = std::move(jo);
   }
 };
+
+inline std::string error_to_string(const Error& e) {
+  if (e.content_type == "application/json") {
+    return json::serialize(json::value_from(e));
+  } else {
+    return std::format("code: {}\nwhat: {}", e.code, e.what);
+  }
+}
 
 inline std::ostream& operator<<(std::ostream& os, const Error& e) {
   return os << "[Error " << e.code << "] " << e.what;
