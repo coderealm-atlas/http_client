@@ -31,6 +31,7 @@ using WithMessageVoid = WithMessage<void>;
 struct AlternativeResp {
   int status;
   json::value body;
+  std::string content_type = "application/json";
 };
 
 struct Error {

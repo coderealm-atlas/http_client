@@ -19,24 +19,34 @@ template <typename T>
 struct ApiResponse {
   std::variant<T, std::vector<T>> data;
   std::optional<resp::DataMeta> meta;
+  std::string content_type = "application/json";
 
   // Constructors
   template <typename U = T>
   requires(!std::same_as<U, std::vector<T>> &&
            !std::same_as<U, resp::ListResult<T>>)
-  ApiResponse(T&& val) : data(std::move(val)) {}
+  ApiResponse(T&& val, const std::string& content_type = "application/json")
+      : data(std::move(val)), content_type(content_type) {}
   // Deleted constructor for lvalue reference to prevent copy
-  ApiResponse(const T& val) = delete;
+  ApiResponse(const T& val,
+              const std::string& content_type = "application/json") = delete;
 
-  ApiResponse(std::vector<T>&& vec)
-      : data(std::move(vec)), meta(resp::DataMeta{vec.size(), 0, vec.size()}) {}
+  ApiResponse(std::vector<T>&& vec,
+              const std::string& content_type = "application/json")
+      : data(std::move(vec)),
+        meta(resp::DataMeta{vec.size(), 0, vec.size()}),
+        content_type(content_type) {}
   // Deleted constructor for lvalue reference to vector
-  ApiResponse(const std::vector<T>&) = delete;
+  ApiResponse(const std::vector<T>&,
+              const std::string& content_type = "application/json") = delete;
 
   ApiResponse(resp::ListResult<T>&& result)
-      : data(std::move(result.data)), meta(std::move(result.meta)) {}
+      : data(std::move(result.data)),
+        meta(std::move(result.meta)),
+        content_type("application/json") {}
 
-  ApiResponse(const resp::ListResult<T>&) = delete;
+  ApiResponse(const resp::ListResult<T>&,
+              const std::string& content_type = "application/json") = delete;
 
   // JSON serialization
   friend void tag_invoke(const json::value_from_tag&, json::value& jv,

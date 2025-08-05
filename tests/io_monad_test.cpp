@@ -606,5 +606,17 @@ TEST(ErrorDataTest, with_data_content) {
   EXPECT_EQ(result.error().alternative_resp->body.as_string(),
             "This is some data content");
 }
+TEST(ApiResponseTest, deleted_construct) {
+  using namespace apihandler;
+  ApiResponse<int> response(42, "text/plain");
+  EXPECT_EQ(response.data.index(), 0);  // Should be int
+  EXPECT_EQ(response.content_type, "text/plain");
+
+  ApiResponse<int> response1 = response;  // copyable
+
+  int i = 5;
+  // ApiResponse<int> response3(i, "text/plain");  // Should not compile, as it
+  // is deleted ApiResponse<int> response3(i);
+}
 
 }  // namespace
