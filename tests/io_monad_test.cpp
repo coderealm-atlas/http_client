@@ -604,6 +604,18 @@ TEST(ErrorDataTest, with_data_content) {
   EXPECT_TRUE(result.error().alternative_body.has_value());
   EXPECT_EQ(result.error().alternative_body->as_object().at("data").as_string(),
             "This is some data content");
+
+  Error err1{404, "Not Found"};
+  std::string response_str = error_to_response(err1);
+  json::value response_json = json::parse(response_str);
+  std::cerr << response_json << std::endl;
+  EXPECT_TRUE(response_json.is_object());
+  EXPECT_EQ(
+      response_json.as_object().at("error").as_object().at("code").as_int64(),
+      404);
+  EXPECT_EQ(
+      response_json.as_object().at("error").as_object().at("what").as_string(),
+      "Not Found");
 }
 TEST(ApiResponseTest, deleted_construct) {
   using namespace apihandler;
