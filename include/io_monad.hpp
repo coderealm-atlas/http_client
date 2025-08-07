@@ -179,6 +179,24 @@ class IO {
     });
   }
 
+  template <typename F>
+  IO<T> finally_then(F&& f) const {
+    return IO<T>([prev = *this, f = std::forward<F>(f)](Callback cb) mutable {
+      prev.run([f = std::move(f), cb = std::move(cb)](IOResult result) mutable {
+        try {
+          auto cleanup_io = f();
+          cleanup_io.run([result = std::move(result), cb = std::move(cb)](auto) mutable {
+            // Ignore cleanup result, return original result
+            cb(std::move(result));
+          });
+        } catch (const std::exception& e) {
+          // If cleanup throws, still return original result
+          cb(std::move(result));
+        }
+      });
+    });
+  }
+
   IO<T> delay(boost::asio::io_context& ioc,
               std::chrono::milliseconds duration) && {
     return IO<T>(
@@ -400,6 +418,24 @@ class IO<void> {
       prev.run([f, cb = std::move(cb)](IOResult result) mutable {
         f();
         cb(std::move(result));
+      });
+    });
+  }
+
+  template <typename F>
+  IO<void> finally_then(F&& f) const {
+    return IO<void>([prev = *this, f = std::forward<F>(f)](Callback cb) mutable {
+      prev.run([f = std::move(f), cb = std::move(cb)](IOResult result) mutable {
+        try {
+          auto cleanup_io = f();
+          cleanup_io.run([result = std::move(result), cb = std::move(cb)](auto) mutable {
+            // Ignore cleanup result, return original result
+            cb(std::move(result));
+          });
+        } catch (const std::exception& e) {
+          // If cleanup throws, still return original result
+          cb(std::move(result));
+        }
       });
     });
   }

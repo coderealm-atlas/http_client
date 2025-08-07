@@ -438,6 +438,24 @@ TEST(IOTest, NonCopyableThunkFailsToClone) {
 
   EXPECT_TRUE(called);
 }
+
+TEST(IOTest, finally_then) {
+  bool finally_called = false;
+
+  auto io =
+      IO<int>::pure(42).finally([&finally_called]() { finally_called = true; });
+
+  bool called = false;
+  io.run([&called](IO<int>::IOResult result) {
+    ASSERT_TRUE(result.is_ok());
+    EXPECT_EQ(result.value(), 42);
+    called = true;
+  });
+
+  EXPECT_TRUE(called);
+  EXPECT_TRUE(finally_called);
+}
+
 TEST(IoutputTest, outputConsole) {
   using namespace customio;
   std::string s = "hello";
