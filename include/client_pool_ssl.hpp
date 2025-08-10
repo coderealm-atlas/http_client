@@ -39,20 +39,6 @@ class ClientPoolSsl {
     }
   }
 
-  // ClientPoolSsl& start(int threads = 2) {
-  //   ioc = std::make_unique<asio::io_context>(threads);
-  //   work_guard = std::make_unique<boost::asio::executor_work_guard<
-  //       boost::asio::io_context::executor_type>>(
-  //       boost::asio::make_work_guard(*ioc));
-  //   threads_ = threads;
-  //   for (size_t i = 0; i < threads; ++i) {
-  //     thread_pool.emplace_back([this] {
-  //       ioc->run();  // Each thread runs the io_context
-  //     });
-  //   }
-  //   return *this;
-  // }
-
   void stop() {
     work_guard->reset();
     ioc->stop();
