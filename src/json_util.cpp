@@ -9,6 +9,7 @@
 #include <format>
 #include <iostream>
 #include <string>
+#include <cstdlib>  // for std::getenv
 
 #include "result_monad.hpp"
 
@@ -151,32 +152,42 @@ std::string replace_env_var(
     const std::string& input,
     const std::map<std::string, std::string>& extra_map) {
   std::string output = input;
+  size_t pos = 0;
+  while (true) {
+    size_t start = output.find("${", pos);
+    if (start == std::string::npos) break;
+    size_t end = output.find('}', start + 2);
+    if (end == std::string::npos) break;  // unmatched, stop processing
 
-  // Basic parsing for ${VARIABLE} or ${VARIABLE:-default} patterns
-  size_t start = output.find("${");
-  size_t end = output.find('}', start);
-  if (start != std::string::npos && end != std::string::npos) {
-    std::string env_var = output.substr(start + 2, end - start - 2);
+    std::string token = output.substr(start + 2, end - start - 2); // VAR or VAR:-default
+    std::string var = token;
     std::string default_val;
 
-    // Check for the ":-" syntax for default values
-    size_t delim = env_var.find(":-");
-    if (delim != std::string::npos) {
-      default_val = env_var.substr(delim + 2);
-      env_var = env_var.substr(0, delim);
+    if (auto delim = token.find(":-"); delim != std::string::npos) {
+      var = token.substr(0, delim);
+      default_val = token.substr(delim + 2);
     }
 
-    if (extra_map.find(env_var) != extra_map.end()) {
-      output.replace(start, end - start + 1, extra_map.at(env_var));
+    // Trim possible whitespace around var (optional; comment out if not desired)
+    // while (!var.empty() && isspace(static_cast<unsigned char>(var.front()))) var.erase(var.begin());
+    // while (!var.empty() && isspace(static_cast<unsigned char>(var.back()))) var.pop_back();
+
+    const char* env_value = std::getenv(var.c_str());
+    std::string replacement;
+    if (env_value && *env_value) {
+      replacement = env_value;  // 1. environment wins
+    } else if (auto it = extra_map.find(var); it != extra_map.end()) {
+      replacement = it->second; // 2. config map
+    } else if (!default_val.empty()) {
+      replacement = default_val; // 3. default in pattern
     } else {
-      // Substitute environment variable or default
-      const char* env_value = std::getenv(env_var.c_str());
-      if (env_value) {
-        output.replace(start, end - start + 1, env_value);
-      } else {
-        return default_val;
-      }
+      // 4. leave unresolved pattern intact; advance past it
+      pos = end + 1;
+      continue;
     }
+
+    output.replace(start, end - start + 1, replacement);
+    pos = start + replacement.size();
   }
   return output;
 }
