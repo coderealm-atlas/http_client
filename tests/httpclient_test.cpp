@@ -14,9 +14,13 @@
 
 #include "aliases.hpp"
 #include "base64.h"
+#include "boost/di.hpp"
 #include "client_pool_ssl.hpp"
 #include "client_ssl_ctx.hpp"
 #include "http_client_monad.hpp"
+#include "io_context_manager.hpp"
+#include "ioc_manager_config_provider.hpp"
+#include "log_stream.hpp"
 #include "misc_util.hpp"
 #include "proxy_pool.hpp"
 #include "tutil.hpp"
@@ -338,4 +342,17 @@ TEST(HttpClientTest, DfListTable) {
 
   notifier.waitForNotification();
   http_client_->stop();
+}
+
+TEST(IocontextTest, ioc) {
+  namespace di = boost::di;
+  static std::shared_ptr<customio::IOutput> output =
+      std::make_shared<customio::ConsoleOutputWithColor>(4);
+  const auto injector =
+      boost::di::make_injector(di::bind<customio::IOutput>().to(*output),
+                               di::bind<cjj365::IIocConfigProvider>()
+                                   .to<cjj365::IocConfigProviderFile>());
+  auto& io_context = injector.create<cjj365::IoContextManager&>();
+  io_context.stop();
+  std::this_thread::sleep_for(std::chrono::milliseconds(100));
 }
