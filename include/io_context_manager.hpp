@@ -1,7 +1,6 @@
 #pragma once
 
 #include <boost/asio/io_context.hpp>
-#include <boost/beast/core.hpp>
 #include <thread>
 
 #include "ioc_manager_config_provider.hpp"
