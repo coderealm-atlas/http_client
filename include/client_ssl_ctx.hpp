@@ -6,6 +6,8 @@
 #include <boost/asio/ssl.hpp>
 #include <iostream>
 
+#include "http_client_config_provider.hpp"
+
 namespace asio = boost::asio;
 namespace ssl = asio::ssl;
 
@@ -79,7 +81,8 @@ class ClientSSLContextWrapper {
   }
 
  public:
-  ClientSSLContextWrapper() : ctx_(ssl::context::tlsv12) {
+  ClientSSLContextWrapper(cjj365::IHttpclientConfigProvider& config_provider)
+      : ctx_(config_provider.get().get_ssl_method()) {
     // Set SSL message callback for debugging
     // SSL_CTX* ssl_ctx = ctx_.native_handle();
     // SSL_CTX_set_msg_callback(ssl_ctx, ssl_msg_callback);

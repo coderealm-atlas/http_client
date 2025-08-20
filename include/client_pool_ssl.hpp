@@ -3,8 +3,8 @@
 #include <boost/asio.hpp>
 #include <memory>
 
-#include "boost/di.hpp"
 #include "client_ssl_ctx.hpp"
+#include "http_client_config_provider.hpp"
 #include "http_session.hpp"
 
 namespace asio = boost::asio;
@@ -25,9 +25,9 @@ class ClientPoolSsl {
 
  public:
   inline static auto HTTPCLIENT_POOL_THREADS = [] {};
-  BOOST_DI_INJECT(ClientPoolSsl, cjj365::ClientSSLContextWrapper& ctx,
-                  (named = HTTPCLIENT_POOL_THREADS) int threads)
-      : client_ssl_ctx(ctx), threads_(threads == 0 ? 2 : threads) {
+  ClientPoolSsl(cjj365::ClientSSLContextWrapper& ctx,
+                cjj365::IHttpclientConfigProvider& config_provider)
+      : client_ssl_ctx(ctx), threads_(config_provider.get().get_threads_num()) {
     ioc = std::make_unique<asio::io_context>(threads_);
     work_guard = std::make_unique<boost::asio::executor_work_guard<
         boost::asio::io_context::executor_type>>(

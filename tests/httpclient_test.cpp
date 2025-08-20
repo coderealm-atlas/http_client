@@ -7,32 +7,34 @@
 #include <boost/url/rfc/unreserved_chars.hpp>
 #include <chrono>
 #include <cstdio>
-#include <filesystem>
 #include <iostream>
-#include <string>
-#include <vector>
+#include <memory>
 
-#include "aliases.hpp"
-#include "base64.h"
 #include "boost/di.hpp"
 #include "client_pool_ssl.hpp"
 #include "client_ssl_ctx.hpp"
+#include "http_client_config_provider.hpp"
 #include "http_client_monad.hpp"
 #include "io_context_manager.hpp"
 #include "ioc_manager_config_provider.hpp"
 #include "log_stream.hpp"
 #include "misc_util.hpp"
-#include "proxy_pool.hpp"
-#include "tutil.hpp"
+#include "simple_data.hpp"
 
 TEST(HttpClientTest, Pool) {
   using namespace monad;
   misc::ThreadNotifier notifier{};
 
-  cjj365::ClientSSLContextWrapper client_ssl_ctx;
+  static cjj365::ConfigSources config_sources({"tests/config_dir"}, {});
+  static cjj365::AppProperties app_properties{config_sources};
+  static std::shared_ptr<cjj365::IHttpclientConfigProvider>
+      http_client_config_provider =
+          std::make_shared<cjj365::HttpclientConfigProviderFile>(
+              app_properties, config_sources);
+  cjj365::ClientSSLContextWrapper client_ssl_ctx(*http_client_config_provider);
 
-  auto http_client_ =
-      std::make_unique<client_async::ClientPoolSsl>(client_ssl_ctx, 2);
+  auto http_client_ = std::make_unique<client_async::ClientPoolSsl>(
+      client_ssl_ctx, *http_client_config_provider);
 
   urls::url_view url("https://example.com/hello?name=world#fragment");
   urls::url target1("/abc?");
@@ -93,10 +95,16 @@ TEST(HttpClientTest, Pool) {
 TEST(HttpClientTest, GetOnly) {
   using namespace monad;
   misc::ThreadNotifier notifier{};
-  cjj365::ClientSSLContextWrapper client_ssl_ctx;
+  static cjj365::ConfigSources config_sources({"tests/config_dir"}, {});
+  static cjj365::AppProperties app_properties{config_sources};
+  static std::shared_ptr<cjj365::IHttpclientConfigProvider>
+      http_client_config_provider =
+          std::make_shared<cjj365::HttpclientConfigProviderFile>(
+              app_properties, config_sources);
+  cjj365::ClientSSLContextWrapper client_ssl_ctx(*http_client_config_provider);
 
-  auto http_client_ =
-      std::make_unique<client_async::ClientPoolSsl>(client_ssl_ctx, 2);
+  auto http_client_ = std::make_unique<client_async::ClientPoolSsl>(
+      client_ssl_ctx, *http_client_config_provider);
 
   // const gatewayDomain = "gray-quick-dove-13.mypinata.cloud"
   // const cid = "bafkreihxhxdozot7mukwx4hx55bbfxxd6vtesccuzgc2qicjrxhrp3rugy"
@@ -148,10 +156,16 @@ TEST(HttpClientTest, PostOnly) {
   using namespace monad;
   misc::ThreadNotifier notifier{};
 
-  cjj365::ClientSSLContextWrapper client_ssl_ctx;
+  static cjj365::ConfigSources config_sources({"tests/config_dir"}, {});
+  static cjj365::AppProperties app_properties{config_sources};
+  static std::shared_ptr<cjj365::IHttpclientConfigProvider>
+      http_client_config_provider =
+          std::make_shared<cjj365::HttpclientConfigProviderFile>(
+              app_properties, config_sources);
+  cjj365::ClientSSLContextWrapper client_ssl_ctx(*http_client_config_provider);
 
-  auto http_client_ =
-      std::make_unique<client_async::ClientPoolSsl>(client_ssl_ctx, 2);
+  auto http_client_ = std::make_unique<client_async::ClientPoolSsl>(
+      client_ssl_ctx, *http_client_config_provider);
 
   auto httpbin_url = "https://httpbin.org/post?a=b";
   {

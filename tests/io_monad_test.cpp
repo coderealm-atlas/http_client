@@ -14,6 +14,7 @@
 #include <boost/url/detail/config.hpp>
 #include <cmath>
 #include <cstdlib>
+#include <filesystem>
 #include <i_output.hpp>
 #include <stdexcept>
 #include <string>
@@ -648,4 +649,8 @@ TEST(ApiResponseTest, deleted_construct) {
   // is deleted ApiResponse<int> response3(i);
 }
 
+TEST(IOTest, current_dir) {
+  std::cerr << std::filesystem::absolute(std::filesystem::current_path())
+            << std::endl;
+}
 }  // namespace
