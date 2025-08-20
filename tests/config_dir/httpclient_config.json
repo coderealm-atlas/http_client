@@ -4,5 +4,31 @@
 	"default_verify_path": true,
 	"verify_paths": [],
 	"certificates": [],
-	"certificate_files": []
+	"certificate_files": [],
+	"proxy_pool": [
+		{
+			"host": "dc.oxylabs.io",
+			"port": 8001,
+			"username": "${OXYLABS_USER}",
+			"password": "${OXYLABS_PASS}"
+		},
+		{
+			"host": "dc.oxylabs.io",
+			"port": 8002,
+			"username": "${OXYLABS_USER}",
+			"password": "${OXYLABS_PASS}"
+		},
+		{
+			"host": "dc.oxylabs.io",
+			"port": 8003,
+			"username": "${OXYLABS_USER}",
+			"password": "${OXYLABS_PASS}"
+		},
+		{
+			"host": "dc.oxylabs.io",
+			"port": 8004,
+			"username": "${OXYLABS_USER}",
+			"password": "${OXYLABS_PASS}"
+		}
+	]
 }

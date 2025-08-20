@@ -24,7 +24,6 @@ class ClientPoolSsl {
       work_guard;
 
  public:
-  inline static auto HTTPCLIENT_POOL_THREADS = [] {};
   ClientPoolSsl(cjj365::ClientSSLContextWrapper& ctx,
                 cjj365::IHttpclientConfigProvider& config_provider)
       : client_ssl_ctx(ctx), threads_(config_provider.get().get_threads_num()) {
@@ -58,7 +57,7 @@ class ClientPoolSsl {
                    ResponseBody, http::basic_fields<std::allocator<char>>>>&&,
                int)>&& callback,
       HttpClientRequestParams&& params = {},
-      const ProxySetting* proxy_setting = nullptr) {
+      const cjj365::ProxySetting* proxy_setting = nullptr) {
     urls::url url(url_input);
     if (url.scheme() == "https") {
       auto session = std::make_shared<

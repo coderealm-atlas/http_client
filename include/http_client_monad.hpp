@@ -19,7 +19,7 @@ namespace monad {
 namespace http = boost::beast::http;
 using client_async::ClientPoolSsl;
 using client_async::HttpClientRequestParams;
-using client_async::ProxySetting;
+using cjj365::ProxySetting;
 
 inline constexpr const char* DEFAULT_TARGET = "";
 

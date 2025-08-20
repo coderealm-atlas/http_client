@@ -50,6 +50,40 @@ inline ssl::context::method ssl_method_from_string(const std::string& name) {
   return it->second;
 }
 
+struct ProxySetting {
+  std::string host;
+  std::string port;
+  std::string username;
+  std::string password;
+
+  bool operator==(const ProxySetting& other) const {
+    return host == other.host && port == other.port &&
+           username == other.username && password == other.password;
+  }
+
+  friend ProxySetting tag_invoke(const json::value_to_tag<ProxySetting>&,
+                                 const json::value& jv) {
+    ProxySetting proxy;
+    if (auto* jo = jv.if_object()) {
+      proxy.host = jo->at("host").as_string().c_str();
+      if (auto* port_p = jo->if_contains("port")) {
+        if (auto* port_string_p = port_p->if_string()) {
+          proxy.port = port_string_p->c_str();
+        } else if (port_p->is_number()) {
+          proxy.port = std::to_string(port_p->as_int64());
+        } else {
+          throw std::invalid_argument("Invalid port type in ProxySetting");
+        }
+      }
+      proxy.username = jo->at("username").as_string().c_str();
+      proxy.password = jo->at("password").as_string().c_str();
+    } else {
+      throw std::invalid_argument("Invalid JSON for ProxySetting");
+    }
+    return proxy;
+  }
+};
+
 struct HttpclientCertificate {
   std::string cert_content;
   std::string file_format;
@@ -92,6 +126,7 @@ class HttpclientConfig {
   std::vector<std::string> verify_paths;
   std::vector<HttpclientCertificate> certificates;
   std::vector<HttpclientCertificateFile> certificate_files;
+  std::vector<cjj365::ProxySetting> proxy_pool;
 
  public:
   friend HttpclientConfig tag_invoke(
@@ -119,6 +154,10 @@ class HttpclientConfig {
             json::value_to<std::vector<HttpclientCertificateFile>>(
                 *certificate_files_p);
       }
+      if (auto* proxy_pool_p = jo->if_contains("proxy_pool")) {
+        config.proxy_pool =
+            json::value_to<std::vector<cjj365::ProxySetting>>(*proxy_pool_p);
+      }
       return config;
     }
     throw std::invalid_argument("Invalid JSON for HttpclientConfig");
@@ -141,6 +180,9 @@ class HttpclientConfig {
   }
   const std::vector<HttpclientCertificateFile>& get_certificate_files() const {
     return certificate_files;
+  }
+  const std::vector<cjj365::ProxySetting>& get_proxy_pool() const {
+    return proxy_pool;
   }
 };
 
@@ -172,3 +214,17 @@ class HttpclientConfigProviderFile : public IHttpclientConfigProvider {
 };
 
 }  // namespace cjj365
+
+namespace std {
+template <>
+struct hash<cjj365::ProxySetting> {
+  std::size_t operator()(const cjj365::ProxySetting& p) const {
+    std::size_t h1 = std::hash<std::string>()(p.host);
+    std::size_t h2 = std::hash<std::string>()(p.port);
+    std::size_t h3 = std::hash<std::string>()(p.username);
+    std::size_t h4 = std::hash<std::string>()(p.password);
+    // Combine hashes (example hash combining strategy)
+    return (((h1 ^ (h2 << 1)) >> 1) ^ (h3 << 1)) ^ (h4 << 1);
+  }
+};
+}  // namespace std

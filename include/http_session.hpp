@@ -17,8 +17,8 @@
 #include <optional>
 
 #include "base64.h"
+#include "http_client_config_provider.hpp"
 // #include "explicit_instantiations.hpp"
-#include "proxy_pool.hpp"
 
 namespace fs = std::filesystem;
 
@@ -29,7 +29,7 @@ namespace ssl = boost::asio::ssl;
 namespace urls = boost::urls;
 namespace trivial = boost::log::trivial;
 namespace logsrc = boost::log::sources;
-using tcp = net::ip::tcp;
+using tcp = asio::ip::tcp;
 
 namespace client_async {
 
@@ -56,7 +56,7 @@ class session {
                    HttpClientRequestParams&& params,  //
                    callback_t&& callback,             //
                    const std::string& default_port,   //
-                   const ProxySetting* proxy_setting = nullptr)
+                   const cjj365::ProxySetting* proxy_setting = nullptr)
       : ioc_(ioc),
         resolver_(asio::make_strand(ioc)),
         no_modify_req_(params.no_modify_req),
@@ -322,7 +322,7 @@ class session {
   std::optional<boost::beast::tcp_stream> proxy_stream_;
   std::optional<http::request<http::empty_body>> proxy_req_;
   std::optional<std::string> body_file_;
-  const ProxySetting* proxy_setting_;
+  const cjj365::ProxySetting* proxy_setting_;
   std::chrono::seconds timeout_{30};
 
  protected:
@@ -351,7 +351,7 @@ class session_ssl
                        urls::url&& url,                   //
                        HttpClientRequestParams&& params,  //
                        callback_t&& callback,             //
-                       const ProxySetting* proxy_setting = nullptr)
+                       const cjj365::ProxySetting* proxy_setting = nullptr)
       : session<session_ssl, RequestBody, ResponseBody, Allocator>(
             ioc, std::move(url), std::move(params), std::move(callback), "443",
             proxy_setting),
@@ -439,7 +439,7 @@ class session_plain
                          urls::url&& url,                   //
                          HttpClientRequestParams&& params,  //
                          callback_t&& callback,
-                         const ProxySetting* proxy_setting = nullptr)
+                         const cjj365::ProxySetting* proxy_setting = nullptr)
       : session<session_plain<RequestBody, ResponseBody, Allocator>,
                 RequestBody, ResponseBody, Allocator>(
             ioc, std::move(url), std::move(params), std::move(callback), "80",
