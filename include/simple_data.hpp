@@ -1,4 +1,6 @@
 #pragma once
+#include <boost/json.hpp>
+#include <boost/json/value_from.hpp>
 #include <boost/system/detail/error_code.hpp>
 #include <filesystem>
 #include <format>
@@ -288,6 +290,69 @@ struct AppProperties {
         }
       }
     }
+  }
+};
+// message SessionAttributes{
+//     optional uint64 user_id = 1;
+//     optional string user_name = 2;
+//     optional string user_email = 3;
+//     optional uint64 created_at = 4;
+//     optional uint64 user_quota_id = 5;
+//     repeated string user_roles = 6;
+// }
+
+enum class AuthBy { USERNAME_PASSWORD, TOKEN, OAUTH };
+
+struct Permission {
+  std::string obtype;
+  std::string obid;
+  std::vector<std::string> actions;
+
+  bool isAll() {
+    return obtype == "*" && obid == "*" &&
+           actions == std::vector<std::string>{"*"};
+  }
+
+  static Permission All() { return Permission{"*", "*", {"*"}}; }
+
+  friend void tag_invoke(const json::value_from_tag&, json::value& jv,
+                         const Permission& p) {
+    jv = json::object{{"obtype", p.obtype},
+                      {"obid", p.obid},
+                      {"actions", json::value_from(p.actions)}};
+  }
+
+  friend Permission tag_invoke(const json::value_from_tag&,
+                               const json::value& jv) {
+    Permission p;
+    p.obtype = jv.at("obtype").as_string();
+    p.obid = jv.at("obid").as_string();
+    p.actions = json::value_to<std::vector<std::string>>(jv.at("actions"));
+    return p;
+  }
+};
+
+struct SessionAttributes {
+  std::optional<uint64_t> user_id;
+  std::optional<std::string> user_name;
+  std::optional<std::string> user_email;
+  std::optional<uint64_t> created_at;
+  std::optional<uint64_t> user_quota_id;
+  std::vector<std::string> user_roles;
+  std::vector<Permission> user_permissions;
+  AuthBy auth_by;
+
+  friend void tag_invoke(const json::value_from_tag&, json::value& jv,
+                         const SessionAttributes& sa) {
+    jv = json::object{
+        {"user_id", sa.user_id.value_or(0)},
+        {"user_name", sa.user_name.value_or("")},
+        {"user_email", sa.user_email.value_or("")},
+        {"created_at", sa.created_at.value_or(0)},
+        {"user_quota_id", sa.user_quota_id.value_or(0)},
+        {"user_roles", json::value_from(sa.user_roles)},
+        {"user_permissions", json::value_from(sa.user_permissions)},
+        {"auth_by", static_cast<int>(sa.auth_by)}};
   }
 };
 

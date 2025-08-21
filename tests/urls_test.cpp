@@ -4,7 +4,11 @@
 #include <boost/json.hpp>  // IWYU pragma: keep
 #include <boost/url.hpp>   // IWYU pragma: keep
 #include <boost/url/rfc/unreserved_chars.hpp>
+#include <boost/url/segments_view.hpp>
+#include <boost/url/url.hpp>
+#include <boost/url/url_view.hpp>
 #include <cstdlib>
+#include <iterator>
 #include <stdexcept>
 #include <string>
 #include <variant>
@@ -106,4 +110,14 @@ TEST(UrlsTest, set_parameter) {
       << "Query should match the expected format";
 
 }  // namespace
+TEST(SegmentsTest, sv) {
+  urls::url_view u1("https://example.com/df/table/list");
+  EXPECT_EQ(u1.path(), "/df/table/list")
+      << "Path should match the expected format";
+  urls::segments_view u1_segments = u1.segments();
+  auto it = u1_segments.begin();
+  std::advance(it, 1);
+  std::string sv1 = *it;
+  ASSERT_EQ(sv1, "table") << "Segment should match the expected format";
+}
 }  // namespace
