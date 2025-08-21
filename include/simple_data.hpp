@@ -1,6 +1,5 @@
 #pragma once
-#include <boost/json.hpp>
-#include <boost/json/value_from.hpp>
+#include <atomic>
 #include <boost/system/detail/error_code.hpp>
 #include <filesystem>
 #include <format>
@@ -11,6 +10,7 @@
 #include <ostream>
 #include <vector>
 
+#include "common_macros.hpp"
 #include "result_monad.hpp"
 
 namespace fs = std::filesystem;
@@ -23,7 +23,8 @@ constexpr size_t TEN_M = static_cast<size_t>(10) * 1024 * 1024;         // 10MB
 static inline auto HELP_COLUMN_WIDTH = [] {};
 
 struct ConfigSources {
-  std::vector<fs::path> paths;
+  inline static std::atomic<int> instance_count{0};
+  std::vector<fs::path> paths_;
   std::vector<std::string> profiles;
   // application_json is the final fallback of configuration.
   // appplication.json is read first, then application.{profile}.json,
@@ -32,8 +33,20 @@ struct ConfigSources {
   std::optional<json::value> application_json;
 
   ConfigSources(std::vector<fs::path> paths, std::vector<std::string> profiles)
-      : paths(std::move(paths)), profiles(std::move(profiles)) {
+      : paths_(std::move(paths)), profiles(std::move(profiles)) {
     // helper: deep merge two json values (objects only)
+    DEBUG_PRINT("initialize ConfigSources with paths_: "
+                << paths_.size() << ", profiles: " << profiles.size());
+    instance_count++;
+    if (instance_count > 1) {
+      throw std::runtime_error(
+          "ConfigSources should only be instantiated once.");
+    }
+    if (paths_.empty()) {
+      throw std::runtime_error(
+          "ConfigSources paths_ cannot be empty, forget to bind the "
+          "ConfigSources in DI?");
+    }
     auto deep_merge = [](json::value& dst, const json::value& src,
                          const auto& self_ref) -> void {
       if (!dst.is_object() || !src.is_object()) return;
@@ -57,7 +70,7 @@ struct ConfigSources {
     };
     // try to load application.json
     std::vector<fs::path> ordered_app_json_paths;
-    for (const auto& path : this->paths) {
+    for (const auto& path : this->paths_) {
       // add application.json if exists
       fs::path app_json_path = path / "application.json";
       if (fs::exists(app_json_path)) {
@@ -106,7 +119,8 @@ struct ConfigSources {
   monad::MyResult<json::value> json_content(const std::string& filename) const {
     // std::string content;
     std::vector<fs::path> ordered_paths;
-    for (const auto& path : paths) {
+    for (const auto& path : paths_) {
+      DEBUG_PRINT("checking: " << path / (filename + ".json"));
       // check for {filename}.json
       if (fs::exists(path / (filename + ".json"))) {
         ordered_paths.push_back(path / (filename + ".json"));
@@ -114,6 +128,7 @@ struct ConfigSources {
       // check for {filename}.{profile}.json
       for (const auto& profile : profiles) {
         fs::path full_path = path / (filename + "." + profile + ".json");
+        DEBUG_PRINT("checking: " << full_path);
         if (fs::exists(full_path)) {
           ordered_paths.push_back(full_path);
         }
@@ -173,8 +188,13 @@ struct ConfigSources {
     if (merged_json.is_object() && !merged_json.as_object().empty()) {
       return monad::MyResult<json::value>::Ok(merged_json);
     }
-    return monad::MyResult<json::value>::Err(monad::Error{
-        5019, std::format("Failed to find JSON file: {}", filename)});
+    std::ostringstream oss;
+    for (auto& path : paths_) {
+      oss << "Failed to find JSON file in: " << fs::absolute(path) << std::endl;
+    }
+    return monad::MyResult<json::value>::Err(
+        monad::Error{5019, std::format("Failed to find JSON file: {}, in: {}",
+                                       filename, oss.str())});
   }
 };
 
@@ -227,7 +247,7 @@ struct AppProperties {
       : config_sources_(config_sources) {
     std::vector<fs::path> ordered_paths;
     // the main order is dirctory by directory, then file by file
-    for (const auto& path : config_sources.paths) {
+    for (const auto& path : config_sources.paths_) {
       if (fs::exists(path) && fs::is_directory(path)) {
         // read application.properties
         fs::path app_properties_path = path / "application.properties";
@@ -273,7 +293,7 @@ struct AppProperties {
         }
       }
     }
-    // Process ordered paths
+    // Process ordered paths_
     for (const auto& path : ordered_paths) {
       if (fs::exists(path) && fs::is_regular_file(path)) {
         auto r = parse_envrc(path).and_then(

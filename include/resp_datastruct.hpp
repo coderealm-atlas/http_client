@@ -18,6 +18,23 @@ struct DataMeta {
     jo["limit"] = meta.limit;
     jv = std::move(jo);
   }
+
+  friend DataMeta tag_invoke(const json::value_to_tag<DataMeta>&,
+                             const json::value& jv) {
+    DataMeta meta;
+    if (auto* jo_p = jv.if_object()) {
+      if (auto* total_p = jo_p->if_contains("total")) {
+        meta.total = total_p->to_number<uint64_t>();
+      }
+      if (auto* offset_p = jo_p->if_contains("offset")) {
+        meta.offset = offset_p->to_number<uint64_t>();
+      }
+      if (auto* limit_p = jo_p->if_contains("limit")) {
+        meta.limit = limit_p->to_number<uint64_t>();
+      }
+    }
+    return meta;
+  }
 };
 
 template <typename T>
