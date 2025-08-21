@@ -1,4 +1,6 @@
 #pragma once
+#include <sys/types.h>
+
 #include <atomic>
 #include <boost/system/detail/error_code.hpp>
 #include <filesystem>
@@ -361,6 +363,18 @@ struct SessionAttributes {
   std::vector<std::string> user_roles;
   std::vector<Permission> user_permissions;
   AuthBy auth_by;
+
+  uint64_t user_id_or_throw() {
+    if (user_id) {
+      return user_id.value();
+    }
+    throw std::runtime_error("user_id is not set");
+  }
+
+  bool is_admin() const {
+    return std::find(user_roles.begin(), user_roles.end(), "admin") !=
+           user_roles.end();
+  }
 
   friend void tag_invoke(const json::value_from_tag&, json::value& jv,
                          const SessionAttributes& sa) {
