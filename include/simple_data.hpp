@@ -2,7 +2,9 @@
 #include <sys/types.h>
 
 #include <atomic>
+#include <boost/json/conversion.hpp>
 #include <boost/system/detail/error_code.hpp>
+#include <cstdint>
 #include <filesystem>
 #include <format>
 #include <fstream>
@@ -344,7 +346,7 @@ struct Permission {
                       {"actions", json::value_from(p.actions)}};
   }
 
-  friend Permission tag_invoke(const json::value_from_tag&,
+  friend Permission tag_invoke(const json::value_to_tag<Permission>&,
                                const json::value& jv) {
     Permission p;
     p.obtype = jv.at("obtype").as_string();
@@ -378,15 +380,61 @@ struct SessionAttributes {
 
   friend void tag_invoke(const json::value_from_tag&, json::value& jv,
                          const SessionAttributes& sa) {
-    jv = json::object{
-        {"user_id", sa.user_id.value_or(0)},
-        {"user_name", sa.user_name.value_or("")},
-        {"user_email", sa.user_email.value_or("")},
-        {"created_at", sa.created_at.value_or(0)},
-        {"user_quota_id", sa.user_quota_id.value_or(0)},
-        {"user_roles", json::value_from(sa.user_roles)},
-        {"user_permissions", json::value_from(sa.user_permissions)},
-        {"auth_by", static_cast<int>(sa.auth_by)}};
+    json::object jo{};
+
+    if (sa.user_id) {
+      jo["user_id"] = sa.user_id.value();
+    }
+    if (sa.user_name) {
+      jo["user_name"] = sa.user_name.value();
+    }
+    if (sa.user_email) {
+      jo["user_email"] = sa.user_email.value();
+    }
+    if (sa.created_at) {
+      jo["created_at"] = sa.created_at.value();
+    }
+    if (sa.user_quota_id) {
+      jo["user_quota_id"] = sa.user_quota_id.value();
+    }
+    if (!sa.user_roles.empty()) {
+      jo["user_roles"] = json::value_from(sa.user_roles);
+    }
+    if (!sa.user_permissions.empty()) {
+      jo["user_permissions"] = json::value_from(sa.user_permissions);
+    }
+    jo["auth_by"] = static_cast<int>(sa.auth_by);
+    jv = std::move(jo);
+  }
+
+  friend SessionAttributes tag_invoke(
+      const json::value_to_tag<SessionAttributes>&, const json::value& jv) {
+    SessionAttributes sa;
+    if (auto* jo_p = jv.if_object()) {
+      if (auto* user_id_p = jo_p->if_contains("user_id")) {
+        sa.user_id.emplace(user_id_p->to_number<uint64_t>());
+      }
+      if (auto* user_name_p = jo_p->if_contains("user_name")) {
+        sa.user_name.emplace(user_name_p->as_string());
+      }
+      if (auto* user_email_p = jo_p->if_contains("user_email")) {
+        sa.user_email.emplace(user_email_p->as_string());
+      }
+      if (auto* created_at_p = jo_p->if_contains("created_at")) {
+        sa.created_at.emplace(created_at_p->to_number<uint64_t>());
+      }
+      if (auto* user_quota_id_p = jo_p->if_contains("user_quota_id")) {
+        sa.user_quota_id.emplace(user_quota_id_p->to_number<uint64_t>());
+      }
+      if (auto* user_roles_p = jo_p->if_contains("user_roles")) {
+        sa.user_roles = json::value_to<std::vector<std::string>>(*user_roles_p);
+      }
+      if (auto* user_permissions_p = jo_p->if_contains("user_permissions")) {
+        sa.user_permissions =
+            json::value_to<std::vector<Permission>>(*user_permissions_p);
+      }
+    }
+    return sa;
   }
 };
 
