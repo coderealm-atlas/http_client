@@ -316,16 +316,8 @@ struct AppProperties {
     }
   }
 };
-// message SessionAttributes{
-//     optional uint64 user_id = 1;
-//     optional string user_name = 2;
-//     optional string user_email = 3;
-//     optional uint64 created_at = 4;
-//     optional uint64 user_quota_id = 5;
-//     repeated string user_roles = 6;
-// }
 
-enum class AuthBy { USERNAME_PASSWORD, TOKEN, OAUTH };
+enum class AuthBy { USERNAME_PASSWORD, API_KEY, JWT_TOKEN };
 
 struct Permission {
   std::string obtype;
@@ -364,7 +356,7 @@ struct SessionAttributes {
   std::optional<uint64_t> user_quota_id;
   std::vector<std::string> user_roles;
   std::vector<Permission> user_permissions;
-  AuthBy auth_by;
+  AuthBy auth_by = AuthBy::USERNAME_PASSWORD;
 
   uint64_t user_id_or_throw() {
     if (user_id) {
