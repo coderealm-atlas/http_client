@@ -26,6 +26,30 @@ constexpr size_t TEN_M = static_cast<size_t>(10) * 1024 * 1024;         // 10MB
 
 static inline auto HELP_COLUMN_WIDTH = [] {};
 
+struct LoggingConfig {
+  std::string level;
+  std::string log_dir;
+  std::string log_file;
+  uint64_t rotation_size;
+  friend LoggingConfig tag_invoke(const json::value_to_tag<LoggingConfig>&,
+                                  const json::value& jv) {
+    std::vector<std::string> all_field_names = {"level", "log_dir", "log_file",
+                                                "rotation_size"};
+    for (const auto& field_name : all_field_names) {
+      if (!jv.as_object().contains(field_name)) {
+        throw std::runtime_error(field_name +
+                                 " not found in json LoggingConfig");
+      }
+    }
+    LoggingConfig lc;
+    lc.level = json::value_to<std::string>(jv.at("level"));
+    lc.log_dir = json::value_to<std::string>(jv.at("log_dir"));
+    lc.log_file = json::value_to<std::string>(jv.at("log_file"));
+    lc.rotation_size = jv.at("rotation_size").to_number<uint64_t>();
+    return lc;
+  }
+};
+
 struct ConfigSources {
   inline static std::atomic<int> instance_count{0};
   std::vector<fs::path> paths_;
@@ -199,6 +223,20 @@ struct ConfigSources {
     return monad::MyResult<json::value>::Err(
         monad::Error{5019, std::format("Failed to find JSON file: {}, in: {}",
                                        filename, oss.str())});
+  }
+
+  monad::MyResult<cjj365::LoggingConfig> logging_config() const {
+    return json_content("log_config")
+        .and_then([](const json::value& jv)
+                      -> monad::MyResult<cjj365::LoggingConfig> {
+          try {
+            return monad::MyResult<cjj365::LoggingConfig>::Ok(
+                json::value_to<cjj365::LoggingConfig>(jv));
+          } catch (const std::exception& e) {
+            return monad::MyResult<cjj365::LoggingConfig>::Err(
+                monad::Error{5019, e.what()});
+          }
+        });
   }
 };
 
