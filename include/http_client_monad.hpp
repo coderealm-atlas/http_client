@@ -17,9 +17,9 @@
 namespace monad {
 
 namespace http = boost::beast::http;
+using cjj365::ProxySetting;
 using client_async::ClientPoolSsl;
 using client_async::HttpClientRequestParams;
-using cjj365::ProxySetting;
 
 inline constexpr const char* DEFAULT_TARGET = "";
 
@@ -183,11 +183,14 @@ struct HttpExchange {
       BOOST_LOG_SEV(lg, trivial::error)
           << "Failed to get JSON response: " << e.what();
       if (response.has_value()) {
-        BOOST_LOG_SEV(lg, trivial::error)
-            << "Reponse body: " << response->body();
+        std::string max_100_chars = response->body();
+        if (max_100_chars.length() > 100) {
+          max_100_chars = max_100_chars.substr(0, 100) + "...";
+        }
+        BOOST_LOG_SEV(lg, trivial::error) << "Reponse body: " << max_100_chars;
         return MyResult<json::value>::Err(Error{
             500, std::format("Failed to parse JSON response: {}, body:\n{}",
-                             e.what(), response->body())});
+                             e.what(), max_100_chars)});
       } else {
         return MyResult<json::value>::Err(Error{
             500, std::string("Failed to parse JSON response: ") + e.what()});
