@@ -409,7 +409,7 @@ struct SessionAttributes {
   }
 
   void add_permissions_from_string(const std::string& json_perms_str) {
-    if (json_perms_str.empty()) return;
+    if (json_perms_str.empty() || json_perms_str == "{}") return;
     try {
       auto permissions_jv = boost::json::parse(json_perms_str);
       auto permissions_t =
@@ -417,7 +417,8 @@ struct SessionAttributes {
       user_permissions.insert(user_permissions.end(), permissions_t.begin(),
                               permissions_t.end());
     } catch (const std::exception& e) {
-      std::cerr << "Failed to parse permissions: " << e.what() << std::endl;
+      std::cerr << "Failed to parse permissions: " << e.what()
+                << ", str: " << json_perms_str << std::endl;
     }
   }
 
