@@ -510,12 +510,12 @@ struct HowDetail {
     return HowDetail{std::numeric_limits<int>::max()};
   }
 
-  bool is_least() { return value == std::numeric_limits<int>::min(); }
+  bool is_least() const { return value == std::numeric_limits<int>::min(); }
 
-  bool is_gt(int v) { return value > v; }
-  bool is_lt(int v) { return value < v; }
+  bool is_gt(int v) const { return value > v; }
+  bool is_lt(int v) const { return value < v; }
 
-  bool is_most() { return value == std::numeric_limits<int>::max(); }
+  bool is_most() const { return value == std::numeric_limits<int>::max(); }
 };
 
 }  // namespace cjj365
