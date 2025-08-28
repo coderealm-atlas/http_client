@@ -2,6 +2,8 @@
 
 #include <functional>
 #include <memory>
+#include <tuple>
+#include <type_traits>
 
 #include "boost/di.hpp"
 
@@ -62,3 +64,57 @@ struct always_new_shared_ptr_scope {
     }
   };
 };
+
+// Utilities to bind a Factory that safely captures only concrete dependencies
+// (not the injector). This avoids dangling injector references when the
+// returned factory outlives the injector's scope.
+//
+// Usage example for an implementation Impl with
+//   using Factory = std::function<std::shared_ptr<Impl>()>;
+// and constructor Impl(Dep1&, Dep2&):
+//   di_utils::safe_factory_binding<Impl, Dep1, Dep2>()
+// can be passed directly into di::make_injector(...).
+//
+// If Interface::Factory is std::function<std::shared_ptr<Interface>()> and
+// Impl : Interface, use:
+//   di_utils::safe_factory_binding_for<Interface, Impl, Dep1, Dep2>()
+// which returns a binding for Interface::Factory.
+namespace di_utils {
+
+template <typename Impl, typename... Deps>
+auto safe_factory_binding() {
+  using Factory = typename Impl::Factory;
+  return boost::di::bind<Factory>().to([](const auto& inj) {
+    // Capture required dependencies by reference wrappers
+    auto deps = std::tuple<std::reference_wrapper<std::remove_reference_t<Deps>>...>{
+        std::ref(inj.template create<Deps&>())...};
+    return Factory{[deps]() mutable {
+      return std::apply(
+          [](auto&... drefs) {
+            return std::make_shared<Impl>(drefs.get()...);
+          },
+          deps);
+    }};
+  });
+}
+
+template <typename Interface, typename Impl, typename... Deps>
+auto safe_factory_binding_for() {
+  static_assert(std::is_base_of_v<Interface, Impl>,
+                "Impl must inherit from Interface");
+  using Factory = typename Interface::Factory;
+  return boost::di::bind<Factory>().to([](const auto& inj) {
+    auto deps = std::tuple<std::reference_wrapper<std::remove_reference_t<Deps>>...>{
+        std::ref(inj.template create<Deps&>())...};
+    return Factory{[deps]() mutable {
+      return std::apply(
+          [](auto&... drefs) {
+            return std::static_pointer_cast<Interface>(
+                std::make_shared<Impl>(drefs.get()...));
+          },
+          deps);
+    }};
+  });
+}
+
+}  // namespace di_utils
