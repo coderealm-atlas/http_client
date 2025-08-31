@@ -166,6 +166,12 @@ struct HttpExchange {
     return result;
   }
 
+  template <typename T>
+  MyResult<T> parseJsonResponse() {
+    return getJsonResponse().and_then(
+        [](json::value jv) -> MyResult<T> { return json::value_to<T>(jv); });
+  }
+
   MyResult<json::value> getJsonResponse() {
     try {
       if (response.has_value()) {
