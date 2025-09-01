@@ -639,7 +639,9 @@ TEST(ErrorDataTest, with_data_content) {
 TEST(ApiResponseTest, deleted_construct) {
   using namespace apihandler;
   ApiResponse<int> response(42, "text/plain");
-  EXPECT_EQ(response.data.index(), 0);  // Should be int
+  EXPECT_EQ(
+      response.data.index(),
+      1);  // Should be int, we added a monostate, so the index() became 1.
   EXPECT_EQ(response.content_type, "text/plain");
 
   ApiResponse<int> response1 = response;  // copyable

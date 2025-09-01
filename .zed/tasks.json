@@ -1,0 +1,20 @@
+[
+  {
+    "label": "build",
+    "command": "cmake",
+    "args": [
+      "--build",
+      "build"
+    ],
+    "use_new_terminal": true
+  },
+  {
+    "label": "test",
+    "command": "ctest",
+    "args": [
+      "--test-dir",
+      "build"
+    ],
+    "use_new_terminal": true
+  }
+]

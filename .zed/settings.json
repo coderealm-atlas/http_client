@@ -1,0 +1,17 @@
+{
+  "languages": {
+    "C++": {
+      "format_on_save": "on",
+      "code_actions_on_format": {
+        "source.fixAll": true
+      }
+    }
+  },
+  "lsp": {
+    "clangd": {
+      "initialization_options": {
+        "compilationDatabasePath": "build"
+      }
+    }
+  }
+}

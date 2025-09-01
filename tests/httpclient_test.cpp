@@ -21,16 +21,24 @@
 #include "misc_util.hpp"
 #include "simple_data.hpp"
 
+static cjj365::ConfigSources& config_sources() {
+  static cjj365::ConfigSources instance({fs::path{"tests/config_dir"}}, {});
+  return instance;
+}
+static customio::ConsoleOutputWithColor& output() {
+  static customio::ConsoleOutputWithColor instance(4);
+  return instance;
+}
+
 TEST(HttpClientTest, Pool) {
   using namespace monad;
   misc::ThreadNotifier notifier{};
 
-  static cjj365::ConfigSources config_sources({"tests/config_dir"}, {});
-  static cjj365::AppProperties app_properties{config_sources};
-  static std::shared_ptr<cjj365::IHttpclientConfigProvider>
+  cjj365::AppProperties app_properties{config_sources()};
+  std::shared_ptr<cjj365::IHttpclientConfigProvider>
       http_client_config_provider =
           std::make_shared<cjj365::HttpclientConfigProviderFile>(
-              app_properties, config_sources);
+              app_properties, config_sources());
   cjj365::ClientSSLContextWrapper client_ssl_ctx(*http_client_config_provider);
 
   auto http_client_ = std::make_unique<client_async::ClientPoolSsl>(
@@ -95,12 +103,11 @@ TEST(HttpClientTest, Pool) {
 TEST(HttpClientTest, GetOnly) {
   using namespace monad;
   misc::ThreadNotifier notifier{};
-  static cjj365::ConfigSources config_sources({"tests/config_dir"}, {});
-  static cjj365::AppProperties app_properties{config_sources};
-  static std::shared_ptr<cjj365::IHttpclientConfigProvider>
+  cjj365::AppProperties app_properties{config_sources()};
+  std::shared_ptr<cjj365::IHttpclientConfigProvider>
       http_client_config_provider =
           std::make_shared<cjj365::HttpclientConfigProviderFile>(
-              app_properties, config_sources);
+              app_properties, config_sources());
   cjj365::ClientSSLContextWrapper client_ssl_ctx(*http_client_config_provider);
 
   auto http_client_ = std::make_unique<client_async::ClientPoolSsl>(
@@ -156,12 +163,11 @@ TEST(HttpClientTest, PostOnly) {
   using namespace monad;
   misc::ThreadNotifier notifier{};
 
-  static cjj365::ConfigSources config_sources({"tests/config_dir"}, {});
-  static cjj365::AppProperties app_properties{config_sources};
-  static std::shared_ptr<cjj365::IHttpclientConfigProvider>
+  cjj365::AppProperties app_properties{config_sources()};
+  std::shared_ptr<cjj365::IHttpclientConfigProvider>
       http_client_config_provider =
           std::make_shared<cjj365::HttpclientConfigProviderFile>(
-              app_properties, config_sources);
+              app_properties, config_sources());
   cjj365::ClientSSLContextWrapper client_ssl_ctx(*http_client_config_provider);
 
   auto http_client_ = std::make_unique<client_async::ClientPoolSsl>(
@@ -214,12 +220,11 @@ TEST(HttpClientTest, PostOnly) {
 
 TEST(IocontextTest, ioc) {
   namespace di = boost::di;
-  static std::shared_ptr<customio::IOutput> output =
-      std::make_shared<customio::ConsoleOutputWithColor>(4);
-  const auto injector =
-      boost::di::make_injector(di::bind<customio::IOutput>().to(*output),
-                               di::bind<cjj365::IIocConfigProvider>()
-                                   .to<cjj365::IocConfigProviderFile>());
+  const auto injector = boost::di::make_injector(
+      di::bind<customio::IOutput>().to(output()),
+      di::bind<cjj365::ConfigSources>().to(config_sources()),
+      di::bind<cjj365::IIocConfigProvider>()
+          .to<cjj365::IocConfigProviderFile>());
   auto& io_context = injector.create<cjj365::IoContextManager&>();
   io_context.stop();
   std::this_thread::sleep_for(std::chrono::milliseconds(100));

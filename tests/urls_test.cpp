@@ -9,12 +9,9 @@
 #include <boost/url/url_view.hpp>
 #include <cstdlib>
 #include <iterator>
-#include <stdexcept>
 #include <string>
-#include <variant>
 
 namespace urls = boost::urls;
-namespace json = boost::json;
 
 namespace {
 

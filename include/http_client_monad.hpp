@@ -248,13 +248,19 @@ template <typename Tag>
 using ExchangePtrFor = HttpExchangePtr<typename TagTraits<Tag>::Request,
                                        typename TagTraits<Tag>::Response>;
 
+template <typename Tag>
+using ExchangeIOFor =
+    monad::IO<HttpExchangePtr<typename TagTraits<Tag>::Request,
+                              typename TagTraits<Tag>::Response>>;
+
 template <typename>
 inline constexpr bool always_false = false;
 
 template <typename Tag>
-monad::
-    IO<HttpExchangePtr<typename TagTraits<Tag>::Request,
-                       typename TagTraits<Tag>::Response>>
+ExchangeIOFor<Tag>
+// monad::
+//     IO<HttpExchangePtr<typename TagTraits<Tag>::Request,
+//                        typename TagTraits<Tag>::Response>>
     /**
      * url_view is not an owner type, so it musts be used immediately. DON'T
      * KEEP IT. and DON'T MOVE THE REFERENCE.
