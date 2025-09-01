@@ -81,8 +81,6 @@ struct HttpExchange {
     }
     int status = static_cast<int>(response->result_int());
     if (status < 200 || status >= 300) {
-      BOOST_LOG_SEV(lg, trivial::error)
-          << "Error response body: " << std::string{response->body()};
       return MyVoidResult::Err(
           Error{status, std::format("Expected 2xx response, got {}", status)});
     }
