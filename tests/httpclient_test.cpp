@@ -19,6 +19,7 @@
 #include "ioc_manager_config_provider.hpp"
 #include "log_stream.hpp"
 #include "misc_util.hpp"
+#include "result_monad.hpp"
 #include "simple_data.hpp"
 
 static cjj365::ConfigSources& config_sources() {
@@ -55,6 +56,8 @@ TEST(HttpClientTest, Pool) {
       << "Target should be '/hello?name=world'";
   using namespace monad;
 
+  std::optional<monad::MyResult<std::string>> response_body_r;
+  std::optional<monad::MyResult<unsigned int>> response_status_r;
   {
     http_io<GetStatusTag>("https://example.com")
         .map([&](auto ex) {
@@ -65,18 +68,14 @@ TEST(HttpClientTest, Pool) {
           return ex;
         })
         .then(http_request_io<GetStatusTag>(*http_client_))
-        .map([](auto ex) {
-          std::cout << ex->response->result() << std::endl;
-          return ex;
-        })
+        .map([](auto ex) { return ex->response->result_int(); })
         .run([&](auto result) {
-          if (result.is_err()) {
-            std::cerr << result.error() << "\n";
-          }
+          response_status_r = std::move(result);
           notifier.notify();
         });
   }
   notifier.waitForNotification();
+  EXPECT_FALSE(response_status_r->is_err()) << response_status_r->error();
 
   {
     http_io<GetStringTag>("https://example.com")
@@ -85,18 +84,14 @@ TEST(HttpClientTest, Pool) {
           return ex;
         })
         .then(http_request_io<GetStringTag>(*http_client_))
-        .map([](auto ex) {
-          std::cout << ex->response->body() << std::endl;
-          return ex;
-        })
-        .run([&](auto result) {
-          if (result.is_err()) {
-            std::cerr << result.error() << "\n";
-          }
+        .map([](auto ex) { return ex->response->body(); })
+        .run([&](monad::MyResult<std::string>&& result) {
+          response_body_r = std::move(result);
           notifier.notify();
         });
   }
   notifier.waitForNotification();
+  EXPECT_FALSE(response_body_r->is_err()) << response_body_r->error();
   http_client_->stop();
 }
 
@@ -124,6 +119,7 @@ TEST(HttpClientTest, GetOnly) {
             "bafkreihxhxdozot7mukwx4hx55bbfxxd6vtesccuzgc2qicjrxhrp3rugy")
       << "URL should match the expected format";
 
+  std::optional<monad::MyResult<std::string>> response_body_r;
   auto httpbin_url = "https://httpbin.org/get?a=b";
   {
     http_io<GetStringTag>(httpbin_url)
@@ -137,25 +133,23 @@ TEST(HttpClientTest, GetOnly) {
           ADD_FAILURE() << "Request failed with error: " << err;
           return IO<ExchangePtrFor<GetStringTag>>::fail(std::move(err));
         })
-        .map([](auto ex) {
-          json::value jv = json::parse(ex->response->body());
-          EXPECT_TRUE(jv.as_object().contains("args"))
-              << "Response should contain 'args' field";
-          EXPECT_TRUE(jv.as_object().contains("headers"))
-              << "Response should contain 'headers' field";
-          EXPECT_TRUE(jv.as_object().contains("url"))
-              << "Response should contain 'url' field";
-          std::cout << "Response: " << jv << std::endl;
-          return ex;
-        })
+        .map([](auto ex) { return ex->response->body(); })
         .run([&](auto result) {
-          if (result.is_err()) {
-            std::cerr << result.error() << "\n";
-          }
+          response_body_r = std::move(result);
           notifier.notify();
         });
   }
   notifier.waitForNotification();
+  EXPECT_FALSE(response_body_r->is_err()) << response_body_r->error();
+
+  json::value jv = json::parse(response_body_r->value());
+  EXPECT_TRUE(jv.as_object().contains("args"))
+      << "Response should contain 'args' field";
+  EXPECT_TRUE(jv.as_object().contains("headers"))
+      << "Response should contain 'headers' field";
+  EXPECT_TRUE(jv.as_object().contains("url"))
+      << "Response should contain 'url' field";
+  std::cout << "Response: " << jv << std::endl;
   http_client_->stop();
 }
 
@@ -174,6 +168,7 @@ TEST(HttpClientTest, PostOnly) {
       client_ssl_ctx, *http_client_config_provider);
 
   auto httpbin_url = "https://httpbin.org/post?a=b";
+  std::optional<monad::MyResult<std::string>> response_body_r;
   {
     http_io<PostJsonTag>(httpbin_url)
         .map([](auto ex) {
@@ -187,34 +182,30 @@ TEST(HttpClientTest, PostOnly) {
           return IO<ExchangePtrFor<PostJsonTag>>::fail(std::move(err));
         })
         .map([](auto ex) {
-          json::value jv = json::parse(ex->response->body());
-          std::cerr << "response body: " << jv << std::endl;
-          EXPECT_TRUE(jv.as_object().contains("args"))
-              << "Response should contain 'args' field";
-          EXPECT_TRUE(jv.as_object().contains("headers"))
-              << "Response should contain 'headers' field";
-          EXPECT_TRUE(jv.as_object().contains("url"))
-              << "Response should contain 'url' field";
-          // expect data
-          EXPECT_TRUE(jv.as_object().contains("data"))
-              << "Response should contain 'data' field";
-          json::value data_jv =
-              json::parse(jv.as_object()["data"].as_string().c_str());
-          EXPECT_EQ(data_jv.as_object()["key"].as_string(), "value")
-              << "Response data should match the sent JSON body";
-          std::cout << "Response: " << jv << std::endl;
-          return ex;
-        })
+          auto vr = ex->expect_2xx();
+          return ex->response->body(); })
         .run([&](auto result) {
-          EXPECT_TRUE(result.is_ok())
-              << "Result should be of type ExchangePtrFor<PostJsonTag>";
-          if (result.is_err()) {
-            std::cerr << result.error() << "\n";
-          }
+          response_body_r = std::move(result);
           notifier.notify();
         });
   }
   notifier.waitForNotification();
+  EXPECT_FALSE(response_body_r->is_err()) << response_body_r->error();
+  json::value jv = json::parse(response_body_r->value());
+  std::cerr << "response body: " << jv << std::endl;
+  EXPECT_TRUE(jv.as_object().contains("args"))
+      << "Response should contain 'args' field";
+  EXPECT_TRUE(jv.as_object().contains("headers"))
+      << "Response should contain 'headers' field";
+  EXPECT_TRUE(jv.as_object().contains("url"))
+      << "Response should contain 'url' field";
+  // expect data
+  EXPECT_TRUE(jv.as_object().contains("data"))
+      << "Response should contain 'data' field";
+  json::value data_jv = json::parse(jv.as_object()["data"].as_string().c_str());
+  EXPECT_EQ(data_jv.as_object()["key"].as_string(), "value")
+      << "Response data should match the sent JSON body";
+  std::cout << "Response: " << jv << std::endl;
   http_client_->stop();
 }
 
