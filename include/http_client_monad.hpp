@@ -217,6 +217,7 @@ struct GetStringTag {};  // Example tag
 struct GetStatusTag {};  // New tag
 struct PostJsonTag {};   // Another example tag
 struct GetHeaderTag {};
+struct DeleteTag {};
 
 template <>
 struct TagTraits<GetStringTag> {
@@ -238,6 +239,12 @@ struct TagTraits<PostJsonTag> {
 
 template <>
 struct TagTraits<GetHeaderTag> {
+  using Request = http::request<http::empty_body>;
+  using Response = http::response<http::empty_body>;
+};
+
+template <>
+struct TagTraits<DeleteTag> {
   using Request = http::request<http::empty_body>;
   using Response = http::response<http::empty_body>;
 };
@@ -282,6 +289,8 @@ ExchangeIOFor<Tag>
       make_exchange({http::verb::head, DEFAULT_TARGET, 11});
     } else if constexpr (std::is_same_v<Tag, GetStringTag>) {
       make_exchange({http::verb::get, DEFAULT_TARGET, 11});
+    } else if constexpr (std::is_same_v<Tag, DeleteTag>) {
+      make_exchange({http::verb::delete_, DEFAULT_TARGET, 11});
     } else if constexpr (std::is_same_v<Tag, PostJsonTag>) {
       Req req{http::verb::post, DEFAULT_TARGET, 11};
       req.set(http::field::content_type, "application/json");
