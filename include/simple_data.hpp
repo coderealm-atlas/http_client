@@ -278,6 +278,72 @@ inline EnvParseResult parse_envrc(const fs::path& envrc) {
 }
 }  // namespace
 
+/*
+ AppProperties — layered .properties loader with deterministic merge order
+
+ Purpose
+   Load key/value properties from one or more configuration directories and
+   profiles, then merge them into a single map<string,string> with predictable
+   override rules. Later entries override earlier ones (last write wins).
+
+ Sources and search roots
+   - Roots come from ConfigSources.paths_ (in the provided order).
+   - Profiles come from ConfigSources.profiles (e.g., ["develop", "prod"]).
+
+ File discovery per root (directory-by-directory, file-by-file)
+   Within each config directory, files are appended to an ordered list in four
+   phases. The order below defines the base → overrides chain (earlier files
+   are overridden by later ones when keys collide):
+
+   1) application.properties
+      - If present, this is the base layer for the directory.
+
+   2) application.{profile}.properties for each profile in ConfigSources.profiles
+      - For example: application.develop.properties, application.prod.properties
+      - Appended in the order of profiles; each can override keys from (1).
+
+   3) Per-module global properties: "*.properties" excluding all application* files
+      - Constraints:
+        • Filename ends with ".properties".
+        • Filename is NOT "application.properties".
+        • Filename does NOT start with "application.".
+        • Filename contains exactly one '.' (i.e., no profile suffix), so
+          names like "mail.properties" or "service.properties" qualify.
+      - These files are appended in directory iteration order and can override
+        keys from (1) and (2).
+
+   4) Per-module profile properties: "*.{profile}.properties" (non-application)
+      - For each profile, include files whose names end with ".{profile}.properties",
+        excluding the special application.{profile}.properties handled in (2).
+      - Additional constraints:
+        • Filename contains exactly two '.' characters.
+        • Example: "mail.develop.properties", "service.prod.properties".
+      - These are appended after (3) and can override any previous phase.
+
+ Merge/precedence semantics
+   - Files are processed in the exact order constructed above for each root,
+     and the roots are processed in the order given by ConfigSources.paths_.
+   - For each file, lines are parsed via parse_envrc() which extracts
+     shell-style assignments of the form:
+       export KEY=VALUE
+     Leading spaces and commented lines (#) are ignored.
+   - Each parsed key/value is inserted into the AppProperties::properties map
+     with simple assignment (properties[key] = value). Therefore, the last
+     occurrence of a key across the ordered file set wins.
+
+ Bookkeeping
+   - processed_files records successfully parsed files in the order they were
+     applied.
+   - failed_files records files that failed to parse/open.
+
+ Practical implications
+   - Put defaults in application.properties.
+   - Override per environment in application.{profile}.properties.
+   - Split domain-specific settings into module.properties and refine with
+     module.{profile}.properties as needed.
+   - When the same key appears in multiple places, the most specific and latest
+     file in the search order takes precedence.
+*/
 struct AppProperties {
   ConfigSources& config_sources_;
   std::map<std::string, std::string> properties;

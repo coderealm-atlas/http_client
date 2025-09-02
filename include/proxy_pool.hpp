@@ -98,15 +98,6 @@ class ProxyPool {
   ProxyPool(cjj365::IHttpclientConfigProvider& config_provider)
       : proxies_(config_provider.get().get_proxy_pool()) {}
 
-  // void set_proxies(std::vector<cjj365::ProxySetting>&& proxies) {
-  //   std::lock_guard<std::mutex> lock(mutex_);
-  //   proxies_ = std::move(proxies);
-  //   blacklist_.clear();
-  //   index_ = 0;
-  //   BOOST_LOG_SEV(lg, trivial::info)
-  //       << "Proxy list updated with " << proxies_.size() << " entries";
-  // }
-
   // empty could also mean disabled.
   bool empty() {
     std::lock_guard<std::mutex> lock(mutex_);
@@ -155,43 +146,6 @@ class ProxyPool {
     blacklist_.clear();
     BOOST_LOG_SEV(lg, trivial::info) << "Blacklist cleared";
   }
-
-  // void load_settings(const fs::path proxy_pool_file) {
-  //   std::vector<client_async::ProxySetting> proxy_settings;
-  //   if (!proxy_pool_file.empty()) {
-  //     std::ifstream proxy_file(proxy_pool_file);
-  //     if (!proxy_file.is_open()) {
-  //       BOOST_LOG_SEV(lg, trivial::error)
-  //           << "Cannot open proxy pool file: " << proxy_pool_file;
-  //       return;
-  //     }
-  //     std::string line;
-  //     while (std::getline(proxy_file, line)) {
-  //       auto start = std::find_if_not(line.begin(), line.end(), ::isspace);
-  //       auto end =
-  //           std::find_if_not(line.rbegin(), line.rend(), ::isspace).base();
-  //       line = std::string(start, end);
-  //       auto result = parse_line<4>(line, ",");
-  //       if (result.has_value()) {
-  //         auto& ary = *result;
-  //         if (ary.size() == 4) {
-  //           ary[2] = replace_env_var(ary[2], {});
-  //           ary[3] = replace_env_var(ary[3], {});
-  //           proxy_settings.push_back({ary[0], ary[1], ary[2],
-  //                                     ary[3]});  // host, port, user,
-  //                                     password
-  //         } else {
-  //           BOOST_LOG_SEV(lg, trivial::error)
-  //               << "Invalid proxy setting: " << line;
-  //         }
-  //       } else {
-  //         BOOST_LOG_SEV(lg, trivial::error)
-  //             << "Failed to parse proxy setting: " << line;
-  //       }
-  //     }
-  //   }
-  //   set_proxies(std::move(proxy_settings));
-  // }
 
  private:
   bool is_blacklisted(const cjj365::ProxySetting& proxy) {

@@ -4,6 +4,7 @@
 #include <boost/asio/ssl.hpp>
 #include <boost/asio/ssl/context.hpp>
 #include <boost/json.hpp>
+#include <cstdint>
 #include <thread>
 #include <vector>
 
@@ -55,10 +56,12 @@ struct ProxySetting {
   std::string port;
   std::string username;
   std::string password;
+  bool disabled = false;
 
   bool operator==(const ProxySetting& other) const {
     return host == other.host && port == other.port &&
-           username == other.username && password == other.password;
+           username == other.username && password == other.password &&
+           disabled == other.disabled;
   }
 
   friend ProxySetting tag_invoke(const json::value_to_tag<ProxySetting>&,
@@ -70,13 +73,14 @@ struct ProxySetting {
         if (auto* port_string_p = port_p->if_string()) {
           proxy.port = port_string_p->c_str();
         } else if (port_p->is_number()) {
-          proxy.port = std::to_string(port_p->as_int64());
+          proxy.port = std::to_string(port_p->to_number<int64_t>());
         } else {
           throw std::invalid_argument("Invalid port type in ProxySetting");
         }
       }
       proxy.username = jo->at("username").as_string().c_str();
       proxy.password = jo->at("password").as_string().c_str();
+      proxy.disabled = jo->at("disabled").as_bool();
     } else {
       throw std::invalid_argument("Invalid JSON for ProxySetting");
     }
@@ -157,6 +161,12 @@ class HttpclientConfig {
       if (auto* proxy_pool_p = jo->if_contains("proxy_pool")) {
         config.proxy_pool =
             json::value_to<std::vector<cjj365::ProxySetting>>(*proxy_pool_p);
+        config.proxy_pool.erase(
+            std::remove_if(config.proxy_pool.begin(), config.proxy_pool.end(),
+                           [](const cjj365::ProxySetting& proxy) {
+                             return proxy.disabled;
+                           }),
+            config.proxy_pool.end());
       }
       return config;
     }
