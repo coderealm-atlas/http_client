@@ -10,7 +10,7 @@
 #include <string>
 #include <utility>
 
-#include "client_pool_ssl.hpp"
+#include "http_client_manager.hpp"
 #include "io_monad.hpp"
 #include "result_monad.hpp"
 
@@ -18,7 +18,7 @@ namespace monad {
 
 namespace http = boost::beast::http;
 using cjj365::ProxySetting;
-using client_async::ClientPoolSsl;
+using client_async::HttpClientManager;
 using client_async::HttpClientRequestParams;
 
 inline constexpr const char* DEFAULT_TARGET = "";
@@ -303,7 +303,7 @@ ExchangeIOFor<Tag>
 
 // ----- Monadic Request Invoker -----
 template <typename Tag>
-auto http_request_io(ClientPoolSsl& pool, int verbose = 0) {
+auto http_request_io(HttpClientManager& pool, int verbose = 0) {
   using Req = typename TagTraits<Tag>::Request;
   using Res = typename TagTraits<Tag>::Response;
   using ExchangePtr = HttpExchangePtr<Req, Res>;

@@ -1,3 +1,27 @@
+# ----------------------------beast_connection_pool_test.cpp------------------------------
+set(T_NAME beast_connection_pool_test)
+add_executable(${T_NAME}
+    beast_connection_pool_test.cpp
+    ${CMAKE_SOURCE_DIR}/src/misc_util.cpp
+)
+target_include_directories(${T_NAME}
+    PUBLIC ${CMAKE_SOURCE_DIR}/include
+    PRIVATE ./include
+)
+target_link_libraries(
+    ${T_NAME}
+    PRIVATE GTest::gtest GTest::gtest_main GTest::gmock GTest::gmock_main
+    PUBLIC 
+        Boost::asio
+        Boost::beast
+    Boost::json
+        OpenSSL::SSL
+        OpenSSL::Crypto
+    )
+add_test(
+    NAME ${T_NAME}
+    COMMAND ${T_NAME}
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 #
 # unit tests:
 #

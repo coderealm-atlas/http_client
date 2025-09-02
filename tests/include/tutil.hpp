@@ -13,8 +13,8 @@ inline std::unique_ptr<ssl::context> client_ssl_ctx() {
   return ctx;
 }
 
-// inline  client_async::ClientPoolSsl httpClientPool(){
-//     return client_async::ClientPoolSsl(8, client_ssl_ctx());
+// inline  client_async::HttpClientManager httpClientPool(){
+//     return client_async::HttpClientManager(8, client_ssl_ctx());
 // }
 
 }  // namespace t
