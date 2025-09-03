@@ -10,25 +10,29 @@
 			"host": "dc.oxylabs.io",
 			"port": 8001,
 			"username": "${OXYLABS_USER}",
-			"password": "${OXYLABS_PASS}"
+			"password": "${OXYLABS_PASS}",
+			"disabled": false
 		},
 		{
 			"host": "dc.oxylabs.io",
 			"port": 8002,
 			"username": "${OXYLABS_USER}",
-			"password": "${OXYLABS_PASS}"
+			"password": "${OXYLABS_PASS}",
+			"disabled": false
 		},
 		{
 			"host": "dc.oxylabs.io",
 			"port": 8003,
 			"username": "${OXYLABS_USER}",
-			"password": "${OXYLABS_PASS}"
+			"password": "${OXYLABS_PASS}",
+			"disabled": false
 		},
 		{
 			"host": "dc.oxylabs.io",
 			"port": 8004,
 			"username": "${OXYLABS_USER}",
-			"password": "${OXYLABS_PASS}"
+			"password": "${OXYLABS_PASS}",
+			"disabled": false
 		}
 	]
 }

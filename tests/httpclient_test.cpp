@@ -292,7 +292,7 @@ TEST(HttpClientTest, Pool) {
           std::make_shared<cjj365::HttpclientConfigProviderFile>(
               app_properties, config_sources());
   cjj365::ClientSSLContextWrapper client_ssl_ctx(*http_client_config_provider);
-
+  std::cerr << "Client SSL context initialized." << std::endl;
   auto http_client_ = std::make_unique<client_async::HttpClientManager>(
       client_ssl_ctx, *http_client_config_provider);
 

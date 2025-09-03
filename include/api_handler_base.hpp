@@ -102,6 +102,16 @@ struct ApiResponse {
 
 struct NoContent {};
 
+struct Success {
+  int64_t code;
+  std::string message;
+
+  friend void tag_invoke(const json::value_from_tag&, json::value& jv,
+                         const Success& s) {
+    jv = json::value{{"code", s.code}, {"message", s.message}};
+  }
+};
+
 struct DownloadInline {
   std::string content;
   std::string content_type;
@@ -200,6 +210,19 @@ struct ResponseGenerator {
     http::response<http::empty_body> res;
     res.version(11);
     res.result(http::status::no_content);
+    return make_io_response(std::move(res));
+  }
+
+  // Success → string_body
+  auto operator()(Success&& s) const {
+    http::response<http::string_body> res;
+    res.version(11);
+    res.result(http::status::ok);
+    json::value jv = json::value_from(s);
+    std::string body = json::serialize(jv);
+    res.body() = std::move(body);
+    res.set(http::field::content_type, "application/json");
+    res.prepare_payload();
     return make_io_response(std::move(res));
   }
 };
