@@ -184,3 +184,27 @@ add_test(
     NAME ${T_NAME}
     COMMAND ${T_NAME}
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+
+# ----------------------------envrc_parse_test.cpp------------------------------
+set(T_NAME envrc_parse_test)
+add_executable(${T_NAME}
+    envrc_parse_test.cpp
+    ${CMAKE_SOURCE_DIR}/src/misc_util.cpp
+)
+
+target_include_directories(${T_NAME}
+    PUBLIC ${CMAKE_SOURCE_DIR}/include
+    PRIVATE ./include
+)
+
+target_link_libraries(
+    ${T_NAME}
+    PRIVATE GTest::gtest GTest::gtest_main GTest::gmock GTest::gmock_main
+    PUBLIC
+        Boost::json
+)
+
+add_test(
+    NAME ${T_NAME}
+    COMMAND ${T_NAME}
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
