@@ -480,8 +480,10 @@ struct AppProperties {
               return monad::MyResult<void>::Ok();
             });
         if (r.is_err()) {
+          DEBUG_PRINT("Failed to parse envrc: {}" << path);
           failed_files.push_back(path);
         } else {
+          DEBUG_PRINT("Successfully parsed envrc: {}" << path);
           processed_files.push_back(path);
         }
       }
