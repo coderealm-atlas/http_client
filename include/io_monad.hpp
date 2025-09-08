@@ -117,6 +117,16 @@ class IO {
   }
 
   /**
+   * Lift a MyResult<T> into IO<T> without additional effects.
+   * - Useful when an operation already produced a Result and you want to
+   *   continue in the IO pipeline.
+   */
+  static IO<T> from_result(Result<T, Error> res) {
+    return IO([res = std::make_shared<Result<T, Error>>(std::move(res))](
+                  Callback cb) mutable { cb(std::move(*res)); });
+  }
+
+  /**
    * Shallow copy the IO thunk. Useful for retry/backoff.
    *
    * Callable requirements:
@@ -545,6 +555,21 @@ class IO<void> {
    */
   static IO<void> fail(Error error) {
     return IO([error = std::move(error)](Callback cb) { cb(IOResult{error}); });
+  }
+
+  /**
+   * Lift a MyVoidResult into IO<void>.
+   * - Success maps to std::monostate success; error is propagated.
+   */
+  static IO<void> from_result(Result<void, Error> res) {
+    return IO([res = std::make_shared<Result<void, Error>>(std::move(res))](
+                  Callback cb) mutable {
+      if (res->is_ok()) {
+        cb(std::monostate{});
+      } else {
+        cb(res->error());
+      }
+    });
   }
 
   /**

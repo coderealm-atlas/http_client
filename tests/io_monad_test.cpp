@@ -187,6 +187,41 @@ TEST(IOMonadTest, VoidFinallyAlwaysCalled) {
   EXPECT_TRUE(called);
 }
 
+TEST(IOMonadTest, FromResultValueOk) {
+  MyResult<int> r = MyResult<int>::Ok(7);
+  IO<int>::from_result(std::move(r)).run([](IO<int>::IOResult result) {
+    ASSERT_TRUE(result.is_ok());
+    EXPECT_EQ(result.value(), 7);
+  });
+}
+
+TEST(IOMonadTest, FromResultValueErr) {
+  Error e{321, "oops"};
+  MyResult<int> r = MyResult<int>::Err(e);
+  IO<int>::from_result(std::move(r)).run([](IO<int>::IOResult result) {
+    ASSERT_TRUE(result.is_err());
+    EXPECT_EQ(result.error().code, 321);
+    EXPECT_EQ(result.error().what, "oops");
+  });
+}
+
+TEST(IOMonadTest, FromResultVoidOk) {
+  MyVoidResult r = MyVoidResult::Ok();
+  IO<void>::from_result(std::move(r)).run([](IO<void>::IOResult result) {
+    ASSERT_TRUE(result.is_ok());
+  });
+}
+
+TEST(IOMonadTest, FromResultVoidErr) {
+  Error e{654, "bad"};
+  MyVoidResult r = MyVoidResult::Err(e);
+  IO<void>::from_result(std::move(r)).run([](IO<void>::IOResult result) {
+    ASSERT_TRUE(result.is_err());
+    EXPECT_EQ(result.error().code, 654);
+    EXPECT_EQ(result.error().what, "bad");
+  });
+}
+
 using monad::Error;
 using monad::MyResult;
 using monad::Result;
