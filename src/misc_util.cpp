@@ -16,7 +16,7 @@ std::string append_GITHUB_HOST(const std::string& content,
   // Check if 'vcpkg_from_github' is present
   if (std::regex_search(content, github_func_pattern)) {
     // Check if GITHUB_HOST already exists
-    
+
     if (content.find("GITHUB_HOST") == std::string::npos) {
       // Add GITHUB_HOST=<https://github.com> before the closing parenthesis
       std::string fmt = "$&\nGITHUB_HOST " + host + "\n";

@@ -2,7 +2,8 @@
 // Copyright (c) 2012-2020 Kris Jusiak (kris at jusiak dot net)
 //
 // Distributed under the Boost Software License, Version 1.0.
-// (See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
+// (See accompanying file LICENSE_1_0.txt or copy at
+// http://www.boost.org/LICENSE_1_0.txt)
 //
 #pragma once
 
@@ -50,7 +51,8 @@ class contextual_bindings : public config {
     return make_policies([&](auto type) -> void {
       using type_t = decltype(type);
       using value_type_t = typename type_t::type;
-      if (std::is_same<value_type_t, context_type&>::value || std::is_same<value_type_t, contexts_list&>::value) {
+      if (std::is_same<value_type_t, context_type&>::value ||
+          std::is_same<value_type_t, contexts_list&>::value) {
         return;
       }
       auto& v = injector->template create<contexts_list&>();

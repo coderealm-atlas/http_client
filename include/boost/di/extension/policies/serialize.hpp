@@ -2,7 +2,8 @@
 // Copyright (c) 2012-2020 Kris Jusiak (kris at jusiak dot net)
 //
 // Distributed under the Boost Software License, Version 1.0.
-// (See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
+// (See accompanying file LICENSE_1_0.txt or copy at
+// http://www.boost.org/LICENSE_1_0.txt)
 //
 #pragma once
 
@@ -20,9 +21,11 @@ namespace extension {
 template <class T>
 auto get_type() {
 #if defined(__clang__)
-  return std::string{&__PRETTY_FUNCTION__[56], sizeof(__PRETTY_FUNCTION__) - 58};
+  return std::string{&__PRETTY_FUNCTION__[56],
+                     sizeof(__PRETTY_FUNCTION__) - 58};
 #elif defined(__GNUC__)
-  return std::string{&__PRETTY_FUNCTION__[61], sizeof(__PRETTY_FUNCTION__) - 63};
+  return std::string{&__PRETTY_FUNCTION__[61],
+                     sizeof(__PRETTY_FUNCTION__) - 63};
 #endif
 }
 
@@ -80,7 +83,8 @@ class serializable_policy : public config {
       using T = decltype(type);
       using given = aux::decay_t<typename decltype(type)::type>;
       auto& v = injector->template create<context&>();
-      auto ptr = get_ptr<given>(injector, std::is_reference<typename T::type>{});
+      auto ptr =
+          get_ptr<given>(injector, std::is_reference<typename T::type>{});
       if (std::is_standard_layout<typename T::type>::value && T::arity::value) {
         ptr = v.back().ptr;
       }
@@ -93,7 +97,8 @@ class serializable_policy : public config {
           if (!T::arity::value) {
             const auto align = alignof(given);
             v.offset = ((v.offset + align - 1) / align) * align;
-            serialize.push_back({v.back().path, v.back().ptr, id(get_type<given>()), v.offset});
+            serialize.push_back(
+                {v.back().path, v.back().ptr, id(get_type<given>()), v.offset});
             v.offset += sizeof(given);
           }
         }
@@ -121,7 +126,8 @@ struct serializable_call {
   }
 
   template <class TExpr, class T, class... Us>
-  static void apply_impl(const archive& o, TExpr expr, aux::type_list<T, Us...>) {
+  static void apply_impl(const archive& o, TExpr expr,
+                         aux::type_list<T, Us...>) {
     if (id(get_type<T>()) == o.type) {
       expr(o, T{});
     } else {
@@ -156,7 +162,8 @@ using serializable_call_t = serializable_call<
 auto serialize = [](const auto& injector, auto& str) {
   serializable_call_t::apply(injector, [&](const auto& o, auto t) {
     str << o.path << " " << o.type << " " << o.offset << " "
-        << std::to_string(*reinterpret_cast<decltype(t)*>(o.ptr() + o.offset)) << std::endl;
+        << std::to_string(*reinterpret_cast<decltype(t)*>(o.ptr() + o.offset))
+        << std::endl;
   });
 };
 

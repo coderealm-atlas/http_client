@@ -97,14 +97,18 @@ class Connection : public std::enable_shared_from_this<Connection> {
   }
 
   tcp::socket& lowest_socket() {
-          return std::visit([](auto& s) -> tcp::socket& {
-            return beast::get_lowest_layer(s).socket();
-          }, stream_);
+    return std::visit(
+        [](auto& s) -> tcp::socket& {
+          return beast::get_lowest_layer(s).socket();
+        },
+        stream_);
   }
   const tcp::socket& lowest_socket() const {
-          return std::visit([](auto& s) -> const tcp::socket& {
-            return beast::get_lowest_layer(s).socket();
-          }, stream_);
+    return std::visit(
+        [](auto& s) -> const tcp::socket& {
+          return beast::get_lowest_layer(s).socket();
+        },
+        stream_);
   }
 
   void set_busy(bool b) {
@@ -127,8 +131,9 @@ class Connection : public std::enable_shared_from_this<Connection> {
           if constexpr (std::is_same_v<S, SslStream>) {
             beast::get_lowest_layer(s).expires_after(std::chrono::seconds(2));
             s.shutdown(ec);
-                  beast::get_lowest_layer(s).socket().shutdown(tcp::socket::shutdown_both, ec);
-                  beast::get_lowest_layer(s).socket().close(ec);
+            beast::get_lowest_layer(s).socket().shutdown(
+                tcp::socket::shutdown_both, ec);
+            beast::get_lowest_layer(s).socket().close(ec);
           } else {
             s.socket().shutdown(tcp::socket::shutdown_both, ec);
             s.socket().close(ec);
@@ -142,7 +147,8 @@ class Connection : public std::enable_shared_from_this<Connection> {
   void set_origin(Origin o) { origin_ = std::move(o); }
 
   // Upgrade an existing TCP stream to SSL, preserving the underlying socket.
-  // Returns pointer to the SSL stream, or nullptr on failure (no ssl_ctx_ or already SSL)
+  // Returns pointer to the SSL stream, or nullptr on failure (no ssl_ctx_ or
+  // already SSL)
   SslStream* upgrade_to_ssl() {
     if (std::holds_alternative<SslStream>(stream_)) {
       return &std::get<SslStream>(stream_);
@@ -172,15 +178,16 @@ class ConnectionPool {
   monad::IO<Connection::Ptr> acquire_monad(Origin origin) {
     return monad::IO<Connection::Ptr>(
         [this, origin = std::move(origin)](auto cb) mutable {
-          this->acquire(std::move(origin), [cb = std::move(cb)](boost::system::error_code ec, Connection::Ptr c) mutable {
-            if (ec || !c) {
-              cb(monad::Error{ec.value(), ec.message()});
-            } else {
-              cb(std::move(c));
-            }
-          });
-        }
-    );
+          this->acquire(std::move(origin),
+                        [cb = std::move(cb)](boost::system::error_code ec,
+                                             Connection::Ptr c) mutable {
+                          if (ec || !c) {
+                            cb(monad::Error{ec.value(), ec.message()});
+                          } else {
+                            cb(std::move(c));
+                          }
+                        });
+        });
   }
 
   // Monadic async_request: returns IO<http::response<ResBody>>
@@ -188,21 +195,20 @@ class ConnectionPool {
   auto async_request_monad(Origin origin, Request req) {
     using ResBody = typename Request::body_type;
     using ResponseT = http::response<ResBody>;
-    return monad::IO<ResponseT>(
-        [this, origin = std::move(origin), req = std::move(req)](auto cb) mutable {
-          this->async_request(
-              std::move(origin), std::move(req),
-              [cb = std::move(cb)](boost::system::error_code ec, auto, ResponseT res) mutable {
-                if (ec) {
-                  cb(monad::Error{ec.value(), ec.message()});
-                } else {
-                  cb(std::move(res));
-                }
-              }
-          );
-        }
-    );
+    return monad::IO<ResponseT>([this, origin = std::move(origin),
+                                 req = std::move(req)](auto cb) mutable {
+      this->async_request(std::move(origin), std::move(req),
+                          [cb = std::move(cb)](boost::system::error_code ec,
+                                               auto, ResponseT res) mutable {
+                            if (ec) {
+                              cb(monad::Error{ec.value(), ec.message()});
+                            } else {
+                              cb(std::move(res));
+                            }
+                          });
+    });
   }
+
  public:
   using AcquireHandler =
       std::function<void(boost::system::error_code, Connection::Ptr)>;
@@ -222,11 +228,8 @@ class ConnectionPool {
 
   // Expose helper to set per-op timeout on the connection's lowest layer
   void set_op_timeout(Connection& c, std::chrono::seconds t) {
-    std::visit(
-        [t](auto& s) {
-                beast::get_lowest_layer(s).expires_after(t);
-        },
-        c.stream());
+    std::visit([t](auto& s) { beast::get_lowest_layer(s).expires_after(t); },
+               c.stream());
   }
 
   // Acquire a ready connection for the origin (reuses or creates).
@@ -271,7 +274,7 @@ class ConnectionPool {
       }
       dq.push_back(c);
       shrink_global_if_needed();
-  arm_reap_if_needed_locked();
+      arm_reap_if_needed_locked();
     });
   }
 
@@ -293,54 +296,52 @@ class ConnectionPool {
       using ResBody = typename Request::body_type;
       auto res = std::make_shared<http::response<ResBody>>();
 
-  // Keep-alive requested; request must outlive async_write
-  Request req2 = std::move(req);
-  req2.keep_alive(true);
-  auto req_ptr = std::make_shared<Request>(std::move(req2));
+      // Keep-alive requested; request must outlive async_write
+      Request req2 = std::move(req);
+      req2.keep_alive(true);
+      auto req_ptr = std::make_shared<Request>(std::move(req2));
 
       // Write with per-operation timeout
       set_op_timeout(*c, cfg_.io_timeout);
 
-                    std::visit(
-                      [this, c, buffer, res, req_ptr, on_response](auto& s) mutable {
+      std::visit(
+          [this, c, buffer, res, req_ptr, on_response](auto& s) mutable {
             using S = std::decay_t<decltype(s)>;
 
-      http::async_write(
-                          s, *req_ptr,
-        net::bind_executor(c->executor(), [this, c, buffer, res, req_ptr,
-                           on_response](
-                                                      boost::system::error_code
-                                                          ec,
-                                                      std::size_t) {
-                  if (ec) {
-                    c->close();
-                    this->release(c, /*can_reuse=*/false);
-                    on_response(ec, Request{},
-                                http::response<typename Request::body_type>{});
-                    return;
-                  }
+            http::async_write(
+                s, *req_ptr,
+                net::bind_executor(
+                    c->executor(),
+                    [this, c, buffer, res, req_ptr, on_response](
+                        boost::system::error_code ec, std::size_t) {
+                      if (ec) {
+                        c->close();
+                        this->release(c, /*can_reuse=*/false);
+                        on_response(
+                            ec, Request{},
+                            http::response<typename Request::body_type>{});
+                        return;
+                      }
 
-                  set_op_timeout(*c, cfg_.io_timeout);
+                      set_op_timeout(*c, cfg_.io_timeout);
 
-                  std::visit(
-                      [this, c, buffer, res, on_response](auto& s2) {
-                        http::async_read(
-                            s2, *buffer, *res,
-                            net::bind_executor(
-                                c->executor(),
-                                [this, c, res, on_response](
-                                    boost::system::error_code ec, std::size_t) {
-                                  bool reusable = !ec && res->keep_alive();
-                                  if (!reusable) c->close();
-                                  this->release(c, reusable);
-                  on_response(
-                    ec,
-                    Request{},
-                    *res);
-                                }));
-                      },
-                      c->stream());
-                }));
+                      std::visit(
+                          [this, c, buffer, res, on_response](auto& s2) {
+                            http::async_read(
+                                s2, *buffer, *res,
+                                net::bind_executor(
+                                    c->executor(),
+                                    [this, c, res, on_response](
+                                        boost::system::error_code ec,
+                                        std::size_t) {
+                                      bool reusable = !ec && res->keep_alive();
+                                      if (!reusable) c->close();
+                                      this->release(c, reusable);
+                                      on_response(ec, Request{}, *res);
+                                    }));
+                          },
+                          c->stream());
+                    }));
           },
           c->stream());
     });
@@ -348,12 +349,12 @@ class ConnectionPool {
 
  private:
   void do_resolve_connect(Connection::Ptr c, AcquireHandler handler) {
-  auto resolver = std::make_shared<tcp::resolver>(strand_);
+    auto resolver = std::make_shared<tcp::resolver>(strand_);
     // Apply resolve timeout via cancellation timer (optional). Simpler: rely on
     // OS + connect timeout.
     resolver->async_resolve(
-  c->origin().host, std::to_string(c->origin().port),
-  net::bind_executor(strand_, [this, c, resolver, handler](
+        c->origin().host, std::to_string(c->origin().port),
+        net::bind_executor(strand_, [this, c, resolver, handler](
                                         boost::system::error_code ec,
                                         tcp::resolver::results_type results) {
           if (ec) {
@@ -366,23 +367,28 @@ class ConnectionPool {
               [this, c, results, handler](auto& s) {
                 using S = std::decay_t<decltype(s)>;
                 if constexpr (std::is_same_v<S, Connection::SslStream>) {
-                  beast::get_lowest_layer(s).expires_after(cfg_.connect_timeout);
+                  beast::get_lowest_layer(s).expires_after(
+                      cfg_.connect_timeout);
                   s.lowest_layer().async_connect(
                       results.begin()->endpoint(),
                       net::bind_executor(
                           c->executor(),
-                          [this, c, handler, host = c->origin().host](boost::system::error_code ec) mutable {
+                          [this, c, handler, host = c->origin().host](
+                              boost::system::error_code ec) mutable {
                             if (ec) {
                               handler(ec, {});
                               return;
                             }
 
                             // Set SNI on the current SSL stream
-                            auto& ssl_s = std::get<Connection::SslStream>(c->stream());
-                            SSL_set_tlsext_host_name(ssl_s.native_handle(), host.c_str());
+                            auto& ssl_s =
+                                std::get<Connection::SslStream>(c->stream());
+                            SSL_set_tlsext_host_name(ssl_s.native_handle(),
+                                                     host.c_str());
 
                             // Handshake
-                            beast::get_lowest_layer(ssl_s).expires_after(cfg_.handshake_timeout);
+                            beast::get_lowest_layer(ssl_s).expires_after(
+                                cfg_.handshake_timeout);
                             ssl_s.async_handshake(
                                 ssl::stream_base::client,
                                 net::bind_executor(
@@ -398,8 +404,8 @@ class ConnectionPool {
                           }));
                 } else {
                   s.expires_after(cfg_.connect_timeout);
-          s.async_connect(
-            results.begin()->endpoint(),
+                  s.async_connect(
+                      results.begin()->endpoint(),
                       net::bind_executor(
                           c->executor(),
                           [c, handler](boost::system::error_code ec) {
@@ -486,7 +492,7 @@ class ConnectionPool {
 
   // Must be called on strand_
   void arm_reap_if_needed_locked() {
-  if (cfg_.idle_reap_interval.count() <= 0) return;  // disabled
+    if (cfg_.idle_reap_interval.count() <= 0) return;  // disabled
     if (reaper_armed_) return;
     std::size_t total = 0;
     for (auto const& kv : idle_) total += kv.second.size();

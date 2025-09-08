@@ -2,7 +2,8 @@
 // Copyright (c) 2012-2020 Kris Jusiak (kris at jusiak dot net)
 //
 // Distributed under the Boost Software License, Version 1.0.
-// (See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
+// (See accompanying file LICENSE_1_0.txt or copy at
+// http://www.boost.org/LICENSE_1_0.txt)
 //
 #pragma once
 
@@ -28,17 +29,21 @@ class shared {
 
 #if !defined(BOOST_DI_NOT_THREAD_SAFE)
     //<<lock mutex so that move will be synchronized>>
-    explicit scope(scope&& other) noexcept : scope(std::move(other), std::lock_guard<std::mutex>(other.mutex_)) {}
+    explicit scope(scope&& other) noexcept
+        : scope(std::move(other), std::lock_guard<std::mutex>(other.mutex_)) {}
     //<<synchronized move constructor>>
-    scope(scope&& other, const std::lock_guard<std::mutex>&) noexcept : object_(std::move(other.object_)) {}
+    scope(scope&& other, const std::lock_guard<std::mutex>&) noexcept
+        : object_(std::move(other.object_)) {}
 #endif
 
     template <class T_, class>
-    using is_referable = typename wrappers::shared<shared, T>::template is_referable<T_>;
+    using is_referable =
+        typename wrappers::shared<shared, T>::template is_referable<T_>;
 
     template <class, class, class TProvider>
     static auto try_create(const TProvider& provider)
-        -> decltype(wrappers::shared<shared, T>{std::shared_ptr<T>{provider.get()}});
+        -> decltype(wrappers::shared<shared, T>{
+            std::shared_ptr<T>{provider.get()}});
 
     /**
      * `in(shared)` version
@@ -75,7 +80,8 @@ class shared {
 #if !defined(BOOST_DI_NOT_THREAD_SAFE)
     std::mutex mutex_;
 #endif
-    std::shared_ptr<T> object_;  /// used by `in(shared)`, otherwise destroyed immediately
+    std::shared_ptr<T>
+        object_;  /// used by `in(shared)`, otherwise destroyed immediately
   };
 };
 }  // namespace detail
@@ -83,7 +89,6 @@ class shared {
 static constexpr detail::shared shared{};
 
 class shared_config : public di::config {
-
  public:
   template <class T>
   struct scope_traits {

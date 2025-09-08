@@ -1,13 +1,11 @@
-#include <boost/asio/io_context.hpp>
-#include <boost/asio/ssl/context.hpp>
-#include <thread>
-#include <stdexcept>
 #include "beast_connection_pool.hpp"
 
 #include <gtest/gtest.h>
 
 #include <boost/asio/io_context.hpp>
 #include <boost/asio/ssl/context.hpp>
+#include <stdexcept>
+#include <thread>
 
 using namespace beast_pool;
 
@@ -125,16 +123,17 @@ struct TestServer {
 
  private:
   void do_accept() {
-    acceptor.async_accept([this](boost::system::error_code ec, tcp::socket sock) {
-      if (ec) return;  // server ends
-      auto sp = std::make_shared<Session>(std::move(sock));
-      sp->run();
-      // Accept only one connection for the test, then stop
-      boost::system::error_code ec2;
-      if (acceptor.close(ec2)) {
-        // ignore acceptor close errors
-      }
-    });
+    acceptor.async_accept(
+        [this](boost::system::error_code ec, tcp::socket sock) {
+          if (ec) return;  // server ends
+          auto sp = std::make_shared<Session>(std::move(sock));
+          sp->run();
+          // Accept only one connection for the test, then stop
+          boost::system::error_code ec2;
+          if (acceptor.close(ec2)) {
+            // ignore acceptor close errors
+          }
+        });
   }
 
   struct Session : public std::enable_shared_from_this<Session> {
@@ -149,7 +148,8 @@ struct TestServer {
     void do_read() {
       boost::beast::http::async_read(
           stream, buffer, req,
-          [self = shared_from_this()](boost::system::error_code ec, std::size_t) {
+          [self = shared_from_this()](boost::system::error_code ec,
+                                      std::size_t) {
             if (ec) return;
             self->do_write();
           });
@@ -165,12 +165,11 @@ struct TestServer {
       res.prepare_payload();
       auto sp = shared_from_this();
       http::async_write(
-          stream, res,
-          [sp](boost::system::error_code, std::size_t) {
+          stream, res, [sp](boost::system::error_code, std::size_t) {
             boost::system::error_code ec;
-              if (sp->stream.socket().shutdown(tcp::socket::shutdown_send, ec)) {
-                // ignore shutdown errors
-              }
+            if (sp->stream.socket().shutdown(tcp::socket::shutdown_send, ec)) {
+              // ignore shutdown errors
+            }
           });
     }
   };

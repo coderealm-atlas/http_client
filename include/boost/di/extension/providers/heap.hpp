@@ -2,7 +2,8 @@
 // Copyright (c) 2012-2020 Kris Jusiak (kris at jusiak dot net)
 //
 // Distributed under the Boost Software License, Version 1.0.
-// (See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
+// (See accompanying file LICENSE_1_0.txt or copy at
+// http://www.boost.org/LICENSE_1_0.txt)
 //
 #pragma once
 
@@ -15,7 +16,8 @@ class heap {
  public:
   template <class TInitialization, class T, class... TArgs>
   struct is_creatable {
-    static constexpr auto value = concepts::creatable<TInitialization, T, TArgs...>::value;
+    static constexpr auto value =
+        concepts::creatable<TInitialization, T, TArgs...>::value;
   };
 
   template <class T, class TMemory, class... TArgs>

@@ -1,11 +1,14 @@
 #pragma once
 
+#include <algorithm>
 #include <boost/asio/io_context.hpp>
 #include <boost/asio/ssl.hpp>
 #include <boost/asio/ssl/context.hpp>
 #include <boost/json.hpp>
 #include <cstdint>
+#include <string>
 #include <thread>
+#include <unordered_map>
 #include <vector>
 
 #include "json_util.hpp"
@@ -131,6 +134,7 @@ class HttpclientConfig {
   ssl::context::method ssl_method = ssl::context::method::tlsv12_client;
   int threads_num = 0;
   bool default_verify_path = true;
+  bool insecure_skip_verify = false;
   std::vector<std::string> verify_paths;
   std::vector<HttpclientCertificate> certificates;
   std::vector<HttpclientCertificateFile> certificate_files;
@@ -153,6 +157,9 @@ class HttpclientConfig {
         if (auto* verify_paths_p = jo->if_contains("verify_paths")) {
           config.verify_paths =
               json::value_to<std::vector<std::string>>(*verify_paths_p);
+        }
+        if (auto* insecure_p = jo->if_contains("insecure_skip_verify")) {
+          config.insecure_skip_verify = json::value_to<bool>(*insecure_p);
         }
         if (auto* certificates_p = jo->if_contains("certificates")) {
           config.certificates =
@@ -193,6 +200,7 @@ class HttpclientConfig {
   }
   ssl::context::method get_ssl_method() const { return ssl_method; }
   bool get_default_verify_path() const { return default_verify_path; }
+  bool get_insecure_skip_verify() const { return insecure_skip_verify; }
   const std::vector<std::string>& get_verify_paths() const {
     return verify_paths;
   }

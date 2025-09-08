@@ -22,6 +22,11 @@ add_test(
     NAME ${T_NAME}
     COMMAND ${T_NAME}
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+# Mark as network-dependent and optionally disable via env flag
+set_tests_properties(${T_NAME} PROPERTIES LABELS "network")
+if("$ENV{HTTPCLIENT_SKIP_NETWORK_TESTS}" STREQUAL "1")
+  set_tests_properties(${T_NAME} PROPERTIES DISABLED TRUE)
+endif()
 #
 # unit tests:
 #
@@ -105,6 +110,10 @@ add_test(
     NAME ${T_NAME}
     COMMAND ${T_NAME}
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+set_tests_properties(${T_NAME} PROPERTIES LABELS "network")
+if("$ENV{HTTPCLIENT_SKIP_NETWORK_TESTS}" STREQUAL "1")
+  set_tests_properties(${T_NAME} PROPERTIES DISABLED TRUE)
+endif()
 
 # ----------------------------io_monad_test.cpp------------------------------
 set(T_NAME io_monad_test)

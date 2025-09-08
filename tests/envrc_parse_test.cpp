@@ -12,11 +12,13 @@ namespace fs = std::filesystem;
 namespace {
 
 // Create a temporary file with given content and return its path.
-fs::path write_temp_file(const std::string& content, const std::string& name_hint = "envrc_test") {
+fs::path write_temp_file(const std::string& content,
+                         const std::string& name_hint = "envrc_test") {
   fs::path dir = fs::temp_directory_path() / "http_client_envrc_tests";
   std::error_code ec;
   fs::create_directories(dir, ec);
-  fs::path file = dir / (name_hint + std::to_string(::getpid()) + ".properties");
+  fs::path file =
+      dir / (name_hint + std::to_string(::getpid()) + ".properties");
   std::ofstream ofs(file);
   ofs << content;
   ofs.close();
@@ -25,8 +27,9 @@ fs::path write_temp_file(const std::string& content, const std::string& name_hin
 
 }  // namespace
 
-// Note: parse_envrc is declared in an unnamed namespace within cjj365 inside the header.
-// Including the header into this TU makes it visible here with internal linkage.
+// Note: parse_envrc is declared in an unnamed namespace within cjj365 inside
+// the header. Including the header into this TU makes it visible here with
+// internal linkage.
 
 TEST(ParseEnvrcTest, ParsesExportAndNonExport) {
   using namespace cjj365;  // brings parse_envrc into scope for this TU

@@ -96,7 +96,6 @@ class session {
   }
 
  public:
-
   // Start the asynchronous operation
  public:
   void run() {
@@ -124,8 +123,8 @@ class session {
     // Start resolve timeout watchdog
     resolve_timer_.expires_after(this->resolve_timeout());
     resolve_timer_.async_wait(asio::bind_executor(
-        resolver_.get_executor(),
-        [self = derived().shared_from_this()](const boost::system::error_code& ec) {
+        resolver_.get_executor(), [self = derived().shared_from_this()](
+                                      const boost::system::error_code& ec) {
           if (!ec) {
             // timeout fired
             self->resolver_.cancel();
@@ -151,8 +150,8 @@ class session {
     // Set a timeout on the operation
     BOOST_LOG_SEV(lg, trivial::debug)
         << "before async_connect to proxy server.";
-  proxy_stream_.emplace(executor());
-  proxy_stream_->expires_after(this->op_timeout());
+    proxy_stream_.emplace(executor());
+    proxy_stream_->expires_after(this->op_timeout());
 
     // Make the connection on the IP address we get from a lookup
     // beast::get_lowest_layer(derived().stream())
@@ -178,8 +177,8 @@ class session {
     }
     std::string url = std::format("{}:{}", urlv.host(), port);
     proxy_req_.emplace(http::verb::connect, url, 11);
-  // Host header for CONNECT should be host:port
-  proxy_req_->set(http::field::host, url);
+    // Host header for CONNECT should be host:port
+    proxy_req_->set(http::field::host, url);
     if (!(proxy_setting_->username.empty() ||
           proxy_setting_->password.empty())) {
       std::string auth =
@@ -188,7 +187,7 @@ class session {
                       std::format("Basic {}", base64_encode(auth)));
     }
 
-  proxy_stream_->expires_after(this->op_timeout());
+    proxy_stream_->expires_after(this->op_timeout());
     BOOST_LOG_SEV(lg, trivial::debug)
         << "proxy request: " << proxy_req_.value();
     http::async_write(
@@ -209,7 +208,7 @@ class session {
 
   void do_read_proxy_response() {
     proxy_response_parser_.emplace();
-  proxy_stream_->expires_after(this->op_timeout());
+    proxy_stream_->expires_after(this->op_timeout());
     http::async_read_header(
         proxy_stream_.value(), buffer_, *proxy_response_parser_,
         [self = derived().shared_from_this()](boost::beast::error_code ec,
@@ -242,8 +241,8 @@ class session {
     // Start resolve timeout watchdog
     resolve_timer_.expires_after(this->resolve_timeout());
     resolve_timer_.async_wait(asio::bind_executor(
-        resolver_.get_executor(),
-        [self = derived().shared_from_this()](const boost::system::error_code& ec) {
+        resolver_.get_executor(), [self = derived().shared_from_this()](
+                                      const boost::system::error_code& ec) {
           if (!ec) {
             self->resolver_.cancel();
           }
@@ -267,8 +266,8 @@ class session {
  protected:
   void do_connect(asio::ip::tcp::resolver::results_type results) {
     // Set a timeout on the operation
-  boost::beast::get_lowest_layer(derived().stream())
-    .expires_after(this->connect_timeout());
+    boost::beast::get_lowest_layer(derived().stream())
+        .expires_after(this->connect_timeout());
     // Make the connection on the IP address we get from a lookup
     boost::beast::get_lowest_layer(derived().stream())
         .async_connect(
@@ -288,16 +287,17 @@ class session {
  public:
   void do_request() {
     // Receive the HTTP response
-  // Apply per-operation timeout
-  boost::beast::get_lowest_layer(derived().stream()).expires_after(this->op_timeout());
-  http::async_write(
+    // Apply per-operation timeout
+    boost::beast::get_lowest_layer(derived().stream())
+        .expires_after(this->op_timeout());
+    http::async_write(
         derived().stream(), req_,
         [self = derived().shared_from_this()](boost::beast::error_code ec,
                                               size_t bytes_transferred) {
           if (ec) {
             BOOST_LOG_SEV(self->lg, trivial::error)
                 << "write: " << ec.message();
-  self->deliver(std::nullopt, 6);
+            self->deliver(std::nullopt, 6);
           } else {
             self->do_read();
           }
@@ -314,7 +314,7 @@ class session {
     } else if constexpr (std::is_same_v<ResponseBody, http::file_body>) {
       if (!this->body_file_.has_value() || this->body_file_->empty()) {
         BOOST_LOG_SEV(this->lg, trivial::error) << "body_file_ is not set.";
-  this->deliver(std::nullopt, 7);
+        this->deliver(std::nullopt, 7);
         return;
       }
       http::file_body::value_type body;
@@ -340,14 +340,14 @@ class session {
           }
         }
         BOOST_LOG_SEV(self->lg, trivial::error) << "read: " << ec.message();
-  self->deliver(self->parser_->release(), 8);
+        self->deliver(self->parser_->release(), 8);
       } else {
-  self->deliver(self->parser_->release(), 0);
+        self->deliver(self->parser_->release(), 0);
       }
     };
     // set time out before read.
-  boost::beast::get_lowest_layer(derived().stream())
-    .expires_after(this->op_timeout());
+    boost::beast::get_lowest_layer(derived().stream())
+        .expires_after(this->op_timeout());
     if constexpr (std::is_same_v<ResponseBody, http::empty_body>) {
       http::async_read_header(derived().stream(), buffer_,
                               this->parser_.value(), cb);
@@ -365,7 +365,7 @@ class session {
  private:
   asio::io_context& ioc_;
   asio::ip::tcp::resolver resolver_;
-    asio::steady_timer resolve_timer_;
+  asio::steady_timer resolve_timer_;
   boost::beast::flat_buffer buffer_;  // (Must persist between reads)
   http::request<RequestBody, http::basic_fields<Allocator>> req_;
   std::string default_port_;
@@ -412,8 +412,8 @@ class session_ssl
       : session<session_ssl, RequestBody, ResponseBody, Allocator>(
             ioc, std::move(url), std::move(params), std::move(callback), "443",
             proxy_setting),
-  ctx_(ctx),
-  stream_(std::make_unique<ssl::stream<beast::tcp_stream>>(ioc, ctx)) {}
+        ctx_(ctx),
+        stream_(std::make_unique<ssl::stream<beast::tcp_stream>>(ioc, ctx)) {}
 
   ssl::stream<boost::beast::tcp_stream>& stream() { return *stream_; }
 
@@ -431,10 +431,10 @@ class session_ssl
       BOOST_LOG_SEV(this->lg, trivial::error)
           << "after connect, set_tlsext_host_name got error: " << ec.message()
           << " host: " << host;
-  return this->deliver(std::nullopt, 9);
+      return this->deliver(std::nullopt, 9);
     }
-  // Apply handshake timeout
-  beast::get_lowest_layer(*stream_).expires_after(this->op_timeout());
+    // Apply handshake timeout
+    beast::get_lowest_layer(*stream_).expires_after(this->op_timeout());
     stream_->async_handshake(
         ssl::stream_base::client,
         [self = this->shared_from_this()](beast::error_code ec) {
@@ -503,7 +503,7 @@ class session_plain
                 RequestBody, ResponseBody, Allocator>(
             ioc, std::move(url), std::move(params), std::move(callback), "80",
             proxy_setting),
-  stream_(std::make_unique<beast::tcp_stream>(ioc)) {}
+        stream_(std::make_unique<beast::tcp_stream>(ioc)) {}
 
   void do_eof() {
     // Gracefully close the socket

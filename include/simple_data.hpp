@@ -272,10 +272,12 @@ inline EnvParseResult parse_envrc(const fs::path& envrc) {
     ltrim(line);
     if (line.empty() || line[0] == '#') continue;
 
-    // Optionally consume leading 'export' keyword (export, export\t, export<spaces>)
+    // Optionally consume leading 'export' keyword (export, export\t,
+    // export<spaces>)
     if (line.rfind("export", 0) == 0) {
       // Ensure next char is whitespace or end
-      if (line.size() == 6 || line.size() > 6 && (line[6] == ' ' || line[6] == '\t')) {
+      if (line.size() == 6 ||
+          line.size() > 6 && (line[6] == ' ' || line[6] == '\t')) {
         line.erase(0, 6);
         ltrim(line);
       }
@@ -286,9 +288,12 @@ inline EnvParseResult parse_envrc(const fs::path& envrc) {
     // Find key and '='
     // Key is up to '=' or whitespace
     size_t i = 0;
-    // Parse key characters (allow [A-Za-z_][A-Za-z0-9_]*), tolerate others but trim
+    // Parse key characters (allow [A-Za-z_][A-Za-z0-9_]*), tolerate others but
+    // trim
     size_t key_start = 0;
-    while (i < line.size() && line[i] != '=' && line[i] != ' ' && line[i] != '\t') ++i;
+    while (i < line.size() && line[i] != '=' && line[i] != ' ' &&
+           line[i] != '\t')
+      ++i;
     std::string key = line.substr(key_start, i - key_start);
     rtrim(key);
     if (key.empty()) continue;
@@ -297,13 +302,14 @@ inline EnvParseResult parse_envrc(const fs::path& envrc) {
     size_t j = i;
     while (j < line.size() && (line[j] == ' ' || line[j] == '\t')) ++j;
     if (j >= line.size() || line[j] != '=') {
-      // No '=' present; treat as empty assignment only if the rest is comment/whitespace
-      // Otherwise, skip line
+      // No '=' present; treat as empty assignment only if the rest is
+      // comment/whitespace Otherwise, skip line
       continue;
     }
     ++j;  // skip '='
     // Support '+=' by ignoring '+' before '=' (KEY+=value) — treat same as '='
-    // Already handled since we looked for '=' and consumed it; if '+' existed before, the key would contain '+'; sanitize it
+    // Already handled since we looked for '=' and consumed it; if '+' existed
+    // before, the key would contain '+'; sanitize it
     if (!key.empty() && key.back() == '+') key.pop_back();
 
     // Skip whitespace before value
@@ -328,7 +334,8 @@ inline EnvParseResult parse_envrc(const fs::path& envrc) {
             value.push_back(c);
           }
         }
-        // Ignore trailing content after closing quote except allow inline comment that starts with #
+        // Ignore trailing content after closing quote except allow inline
+        // comment that starts with #
       } else {
         // Unquoted: read until unquoted '#'
         size_t k = j;
@@ -366,11 +373,13 @@ inline EnvParseResult parse_envrc(const fs::path& envrc) {
    1) application.properties
       - If present, this is the base layer for the directory.
 
-   2) application.{profile}.properties for each profile in ConfigSources.profiles
+   2) application.{profile}.properties for each profile in
+ ConfigSources.profiles
       - For example: application.develop.properties, application.prod.properties
       - Appended in the order of profiles; each can override keys from (1).
 
-   3) Per-module global properties: "*.properties" excluding all application* files
+   3) Per-module global properties: "*.properties" excluding all application*
+ files
       - Constraints:
         • Filename ends with ".properties".
         • Filename is NOT "application.properties".
@@ -381,8 +390,9 @@ inline EnvParseResult parse_envrc(const fs::path& envrc) {
         keys from (1) and (2).
 
    4) Per-module profile properties: "*.{profile}.properties" (non-application)
-      - For each profile, include files whose names end with ".{profile}.properties",
-        excluding the special application.{profile}.properties handled in (2).
+      - For each profile, include files whose names end with
+ ".{profile}.properties", excluding the special application.{profile}.properties
+ handled in (2).
       - Additional constraints:
         • Filename contains exactly two '.' characters.
         • Example: "mail.develop.properties", "service.prod.properties".

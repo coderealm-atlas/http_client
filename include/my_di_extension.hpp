@@ -86,13 +86,12 @@ auto safe_factory_binding() {
   using Factory = typename Impl::Factory;
   return boost::di::bind<Factory>().to([](const auto& inj) {
     // Capture required dependencies by reference wrappers
-    auto deps = std::tuple<std::reference_wrapper<std::remove_reference_t<Deps>>...>{
-        std::ref(inj.template create<Deps&>())...};
+    auto deps =
+        std::tuple<std::reference_wrapper<std::remove_reference_t<Deps>>...>{
+            std::ref(inj.template create<Deps&>())...};
     return Factory{[deps]() mutable {
       return std::apply(
-          [](auto&... drefs) {
-            return std::make_shared<Impl>(drefs.get()...);
-          },
+          [](auto&... drefs) { return std::make_shared<Impl>(drefs.get()...); },
           deps);
     }};
   });
@@ -104,8 +103,9 @@ auto safe_factory_binding_for() {
                 "Impl must inherit from Interface");
   using Factory = typename Interface::Factory;
   return boost::di::bind<Factory>().to([](const auto& inj) {
-    auto deps = std::tuple<std::reference_wrapper<std::remove_reference_t<Deps>>...>{
-        std::ref(inj.template create<Deps&>())...};
+    auto deps =
+        std::tuple<std::reference_wrapper<std::remove_reference_t<Deps>>...>{
+            std::ref(inj.template create<Deps&>())...};
     return Factory{[deps]() mutable {
       return std::apply(
           [](auto&... drefs) {

@@ -2,7 +2,8 @@
 // Copyright (c) 2012-2020 Kris Jusiak (kris at jusiak dot net)
 //
 // Distributed under the Boost Software License, Version 1.0.
-// (See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
+// (See accompanying file LICENSE_1_0.txt or copy at
+// http://www.boost.org/LICENSE_1_0.txt)
 //
 #pragma once
 
@@ -38,7 +39,8 @@ class session {
 #if defined(__MSVC__)
     static auto try_create(const TProvider& provider) -> T;
 #else
-    static auto try_create(const TProvider& provider) -> decltype(scope_type{}.template try_create<T, TName>(provider));
+    static auto try_create(const TProvider& provider)
+        -> decltype(scope_type{}.template try_create<T, TName>(provider));
 #endif
 
     template <class T, class TName, class TProvider>

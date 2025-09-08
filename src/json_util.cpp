@@ -6,10 +6,10 @@
 #include <boost/json/serialize.hpp>
 #include <charconv>
 #include <cstdint>
+#include <cstdlib>  // for std::getenv
 #include <format>
 #include <iostream>
 #include <string>
-#include <cstdlib>  // for std::getenv
 
 #include "result_monad.hpp"
 
@@ -159,7 +159,8 @@ std::string replace_env_var(
     size_t end = output.find('}', start + 2);
     if (end == std::string::npos) break;  // unmatched, stop processing
 
-    std::string token = output.substr(start + 2, end - start - 2); // VAR or VAR:-default
+    std::string token =
+        output.substr(start + 2, end - start - 2);  // VAR or VAR:-default
     std::string var = token;
     std::string default_val;
 
@@ -168,18 +169,19 @@ std::string replace_env_var(
       default_val = token.substr(delim + 2);
     }
 
-    // Trim possible whitespace around var (optional; comment out if not desired)
-    // while (!var.empty() && isspace(static_cast<unsigned char>(var.front()))) var.erase(var.begin());
-    // while (!var.empty() && isspace(static_cast<unsigned char>(var.back()))) var.pop_back();
+    // Trim possible whitespace around var (optional; comment out if not
+    // desired) while (!var.empty() && isspace(static_cast<unsigned
+    // char>(var.front()))) var.erase(var.begin()); while (!var.empty() &&
+    // isspace(static_cast<unsigned char>(var.back()))) var.pop_back();
 
     const char* env_value = std::getenv(var.c_str());
     std::string replacement;
     if (env_value && *env_value) {
       replacement = env_value;  // 1. environment wins
     } else if (auto it = extra_map.find(var); it != extra_map.end()) {
-      replacement = it->second; // 2. config map
+      replacement = it->second;  // 2. config map
     } else if (!default_val.empty()) {
-      replacement = default_val; // 3. default in pattern
+      replacement = default_val;  // 3. default in pattern
     } else {
       // 4. leave unresolved pattern intact; advance past it
       pos = end + 1;

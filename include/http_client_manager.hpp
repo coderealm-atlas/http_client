@@ -16,7 +16,7 @@ namespace client_async {
 class HttpClientManager {
  private:
   std::unique_ptr<asio::io_context> ioc;
-  cjj365::ClientSSLContextWrapper& client_ssl_ctx;
+  cjj365::ClientSSLContext& client_ssl_ctx;
   int threads_;
   std::vector<std::thread> thread_pool;
   std::unique_ptr<
@@ -25,7 +25,7 @@ class HttpClientManager {
   std::unique_ptr<beast_pool::ConnectionPool> pool_;
 
  public:
-  HttpClientManager(cjj365::ClientSSLContextWrapper& ctx,
+  HttpClientManager(cjj365::ClientSSLContext& ctx,
                     cjj365::IHttpclientConfigProvider& config_provider)
       : client_ssl_ctx(ctx), threads_(config_provider.get().get_threads_num()) {
     ioc = std::make_unique<asio::io_context>(threads_);
