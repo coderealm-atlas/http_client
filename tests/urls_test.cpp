@@ -12,6 +12,7 @@
 #include <string>
 
 namespace urls = boost::urls;
+namespace json = boost::json;
 
 namespace {
 
@@ -116,5 +117,16 @@ TEST(SegmentsTest, sv) {
   std::advance(it, 1);
   std::string sv1 = *it;
   ASSERT_EQ(sv1, "table") << "Segment should match the expected format";
+}
+
+TEST(JsonTest, jvValue2Object) {
+  json::value jv;
+  // expect throw
+  ASSERT_ANY_THROW(json::value_to<json::object>(jv));
+
+  jv = {{"user", "John Doe"}};
+  json::object obj = json::value_to<json::object>(jv);
+
+  ASSERT_TRUE(obj.contains("user"));
 }
 }  // namespace

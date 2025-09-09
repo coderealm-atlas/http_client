@@ -1,19 +1,97 @@
 [
   {
-    "label": "build",
+    "label": "build: urls_test",
     "command": "cmake",
-    "args": [
-      "--build",
-      "build"
-    ],
+    "args": ["--build", "build", "--target", "urls_test"],
+    "use_new_terminal": true
+  },
+  {
+    "label": "build: httpclient_test",
+    "command": "cmake",
+    "args": ["--build", "build", "--target", "httpclient_test"],
     "use_new_terminal": true
   },
   {
     "label": "test",
     "command": "ctest",
+    "args": ["--test-dir", "build"],
+    "use_new_terminal": true
+  },
+  {
+    "label": "build: beast_connection_pool_test",
+    "command": "cmake",
+    "args": ["--build", "build", "--target", "beast_connection_pool_test"],
+    "use_new_terminal": true
+  },
+  {
+    "label": "build: envrc_parse_test",
+    "command": "cmake",
+    "args": ["--build", "build", "--target", "envrc_parse_test"],
+    "use_new_terminal": true
+  },
+  {
+    "label": "build: io_monad_test",
+    "command": "cmake",
+    "args": ["--build", "build", "--target", "io_monad_test"],
+    "use_new_terminal": true
+  },
+  {
+    "label": "build: json_env_substitute_test",
+    "command": "cmake",
+    "args": ["--build", "build", "--target", "json_env_substitute_test"],
+    "use_new_terminal": true
+  },
+  {
+    "label": "build and run: beast_connection_pool_test",
+    "command": "sh",
     "args": [
-      "--test-dir",
-      "build"
+      "-c",
+      "cmake --build build --target beast_connection_pool_test && ./build/tests/beast_connection_pool_test"
+    ],
+    "use_new_terminal": true
+  },
+  {
+    "label": "build and run: envrc_parse_test",
+    "command": "sh",
+    "args": [
+      "-c",
+      "cmake --build build --target envrc_parse_test && ./build/tests/envrc_parse_test"
+    ],
+    "use_new_terminal": true
+  },
+  {
+    "label": "build and run: httpclient_test",
+    "command": "sh",
+    "args": [
+      "-c",
+      "cmake --build build --target httpclient_test && ./build/tests/httpclient_test"
+    ],
+    "use_new_terminal": true
+  },
+  {
+    "label": "build and run: io_monad_test",
+    "command": "sh",
+    "args": [
+      "-c",
+      "cmake --build build --target io_monad_test && ./build/tests/io_monad_test"
+    ],
+    "use_new_terminal": true
+  },
+  {
+    "label": "build and run: json_env_substitute_test",
+    "command": "sh",
+    "args": [
+      "-c",
+      "cmake --build build --target json_env_substitute_test && ./build/tests/json_env_substitute_test"
+    ],
+    "use_new_terminal": true
+  },
+  {
+    "label": "build and run: urls_test",
+    "command": "sh",
+    "args": [
+      "-c",
+      "cmake --build build --target urls_test && ./build/tests/urls_test"
     ],
     "use_new_terminal": true
   }

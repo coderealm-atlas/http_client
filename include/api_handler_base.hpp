@@ -151,23 +151,25 @@ auto make_io_response(Resp&& r) {
 struct ResponseGenerator {
   // ApiResponse<T> → http::string_body
   template <typename T>
-  auto operator()(ApiResponse<T>&& resp) const {
+  auto operator()(ApiResponse<T>&& resp,
+                  http::status status = http::status::ok) const {
     http::response<http::string_body> res;
     res.version(11);
     json::value jv = json::value_from(resp);
     std::string body = json::serialize(jv);
     res.body() = std::move(body);
     res.set(http::field::content_type, "application/json");
-    res.result(http::status::ok);
+    res.result(status);
     res.prepare_payload();
     return make_io_response(std::move(res));
   }
 
   // Download → string_body
-  auto operator()(DownloadInline&& d) const {
+  auto operator()(DownloadInline&& d,
+                  http::status status = http::status::ok) const {
     http::response<http::string_body> res;
     res.version(11);
-    res.result(http::status::ok);
+    res.result(status);
     res.body() = std::move(d.content);
     res.set(http::field::content_type, d.content_type);
     res.set(http::field::content_disposition,
@@ -176,10 +178,11 @@ struct ResponseGenerator {
     return make_io_response(std::move(res));
   }
 
-  auto operator()(DownloadFile&& d) const {
+  auto operator()(DownloadFile&& d,
+                  http::status status = http::status::ok) const {
     http::response<http::file_body> res;
     res.version(11);
-    res.result(http::status::ok);
+    res.result(status);
 
     boost::beast::error_code bec;
     res.body().open(d.path.c_str(), boost::beast::file_mode::scan, bec);
@@ -214,10 +217,10 @@ struct ResponseGenerator {
   }
 
   // Success → string_body
-  auto operator()(Success&& s) const {
+  auto operator()(Success&& s, http::status status = http::status::ok) const {
     http::response<http::string_body> res;
     res.version(11);
-    res.result(http::status::ok);
+    res.result(status);
     json::value jv = json::value_from(s);
     std::string body = json::serialize(jv);
     res.body() = std::move(body);
