@@ -1,8 +1,6 @@
 #pragma once
 #include <atomic>
 #include <chrono>
-#include <iostream>
-#include <memory>
 #include <thread>
 
 namespace cjj365 {
