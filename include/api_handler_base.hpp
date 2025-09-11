@@ -4,6 +4,7 @@
 #include <boost/beast/http/empty_body.hpp>
 #include <boost/beast/http/file_body_fwd.hpp>
 #include <boost/beast/http/message_fwd.hpp>
+#include <cstdint>
 #include <filesystem>
 #include <iostream>
 
@@ -38,7 +39,7 @@ struct ApiResponse {
   ApiResponse(std::vector<T>&& vec,
               const std::string& content_type = "application/json")
       : data(std::move(vec)),
-        meta(resp::DataMeta{vec.size(), 0, vec.size()}),
+        meta(resp::DataMeta{static_cast<int64_t>(vec.size()), 0, vec.size()}),
         content_type(content_type) {}
   // Deleted constructor for lvalue reference to vector
   ApiResponse(const std::vector<T>&,

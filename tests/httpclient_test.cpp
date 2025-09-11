@@ -14,6 +14,7 @@
 #include <iostream>
 #include <memory>
 
+#include "api_handler_base.hpp"
 #include "boost/di.hpp"
 #include "client_ssl_ctx.hpp"
 #include "http_client_config_provider.hpp"
@@ -621,4 +622,17 @@ TEST(IocontextTest, ioc) {
   auto& io_context = injector.create<cjj365::IoContextManager&>();
   io_context.stop();
   std::this_thread::sleep_for(std::chrono::milliseconds(100));
+}
+
+TEST(DataShapeTest, vec) {
+  struct SimpleData {
+    int id;
+    std::string name;
+    // Enable comparison for testing
+    bool operator==(const SimpleData& other) const {
+      return id == other.id && name == other.name;
+    }
+  };
+  apihandler::ApiResponse<SimpleData> resp(
+      std::vector<SimpleData>{{1, "one"}, {2, "two"}});
 }
