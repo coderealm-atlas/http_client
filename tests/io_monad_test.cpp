@@ -727,4 +727,105 @@ TEST(IOTest, current_dir) {
   std::cerr << std::filesystem::absolute(std::filesystem::current_path())
             << std::endl;
 }
+
+TEST(IOTypeAliasTest, CommonTypeAliases) {
+  using namespace monad;
+  
+  // Test VoidIO
+  bool void_called = false;
+  VoidIO::pure().run([&void_called](VoidIO::IOResult result) {
+    ASSERT_TRUE(result.is_ok());
+    void_called = true;
+  });
+  EXPECT_TRUE(void_called);
+  
+  // Test StringIO
+  bool string_called = false;
+  StringIO::pure("hello world").run([&string_called](StringIO::IOResult result) {
+    ASSERT_TRUE(result.is_ok());
+    EXPECT_EQ(result.value(), "hello world");
+    string_called = true;
+  });
+  EXPECT_TRUE(string_called);
+  
+  // Test IntIO and Int64IO
+  bool int_called = false;
+  IntIO::pure(42).run([&int_called](IntIO::IOResult result) {
+    ASSERT_TRUE(result.is_ok());
+    EXPECT_EQ(result.value(), 42);
+    int_called = true;
+  });
+  EXPECT_TRUE(int_called);
+  
+  bool int64_called = false;
+  Int64IO::pure(9223372036854775807LL).run([&int64_called](Int64IO::IOResult result) {
+    ASSERT_TRUE(result.is_ok());
+    EXPECT_EQ(result.value(), 9223372036854775807LL);
+    int64_called = true;
+  });
+  EXPECT_TRUE(int64_called);
+  
+  // Test BoolIO
+  bool bool_called = false;
+  BoolIO::pure(true).run([&bool_called](BoolIO::IOResult result) {
+    ASSERT_TRUE(result.is_ok());
+    EXPECT_TRUE(result.value());
+    bool_called = true;
+  });
+  EXPECT_TRUE(bool_called);
+}
+
+TEST(IOTypeAliasTest, ContainerAndJsonTypes) {
+  using namespace monad;
+  
+  // Test StringVectorIO
+  std::vector<std::string> vec = {"hello", "world", "test"};
+  bool vector_called = false;
+  StringVectorIO::pure(vec).run([&vector_called](StringVectorIO::IOResult result) {
+    ASSERT_TRUE(result.is_ok());
+    EXPECT_EQ(result.value().size(), 3);
+    EXPECT_EQ(result.value()[0], "hello");
+    EXPECT_EQ(result.value()[1], "world");
+    EXPECT_EQ(result.value()[2], "test");
+    vector_called = true;
+  });
+  EXPECT_TRUE(vector_called);
+  
+  // Test JsonIO
+  boost::json::value json_val = boost::json::object{{"key", "value"}, {"number", 42}};
+  bool json_called = false;
+  JsonIO::pure(json_val).run([&json_called](JsonIO::IOResult result) {
+    ASSERT_TRUE(result.is_ok());
+    auto obj = result.value().as_object();
+    EXPECT_EQ(obj.at("key").as_string(), "value");
+    EXPECT_EQ(obj.at("number").as_int64(), 42);
+    json_called = true;
+  });
+  EXPECT_TRUE(json_called);
+}
+
+TEST(IOTypeAliasTest, OptionalTypes) {
+  using namespace monad;
+  
+  // Test OptionalStringIO with value
+  std::optional<std::string> opt_with_value = "optional content";
+  bool opt_string_called = false;
+  OptionalStringIO::pure(opt_with_value).run([&opt_string_called](OptionalStringIO::IOResult result) {
+    ASSERT_TRUE(result.is_ok());
+    ASSERT_TRUE(result.value().has_value());
+    EXPECT_EQ(result.value().value(), "optional content");
+    opt_string_called = true;
+  });
+  EXPECT_TRUE(opt_string_called);
+  
+  // Test OptionalIntIO with no value
+  std::optional<int> opt_empty;
+  bool opt_int_called = false;
+  OptionalIntIO::pure(opt_empty).run([&opt_int_called](OptionalIntIO::IOResult result) {
+    ASSERT_TRUE(result.is_ok());
+    EXPECT_FALSE(result.value().has_value());
+    opt_int_called = true;
+  });
+  EXPECT_TRUE(opt_int_called);
+}
 }  // namespace

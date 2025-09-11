@@ -2,13 +2,19 @@
 
 #include <boost/asio.hpp>
 #include <chrono>
+#include <cstdint>
 #include <exception>
+#include <filesystem>
+#include <fstream>
 #include <functional>
 #include <memory>
+#include <optional>
 #include <type_traits>
 #include <utility>
 #include <variant>
+#include <vector>
 
+#include <boost/json.hpp>
 #include "result_monad.hpp"
 
 // This is a simple IO monad implementation in C++.
@@ -908,5 +914,34 @@ IO<void> chain_io(const std::vector<T>& vec, F&& f) {
   }
   return acc;
 }
+
+// Common IO type aliases for convenience
+using VoidIO = IO<void>;
+using StringIO = IO<std::string>;
+using IntIO = IO<int>;
+using Int32IO = IO<std::int32_t>;
+using Int64IO = IO<std::int64_t>;
+using UInt32IO = IO<std::uint32_t>;
+using UInt64IO = IO<std::uint64_t>;
+using BoolIO = IO<bool>;
+using DoubleIO = IO<double>;
+using FloatIO = IO<float>;
+using SizeTIO = IO<std::size_t>;
+
+// JSON and container types
+using JsonIO = IO<boost::json::value>;
+using JsonObjectIO = IO<boost::json::object>;
+using JsonArrayIO = IO<boost::json::array>;
+using StringVectorIO = IO<std::vector<std::string>>;
+using IntVectorIO = IO<std::vector<int>>;
+using BytesIO = IO<std::vector<std::uint8_t>>;
+
+// Filesystem and path types
+using PathIO = IO<std::filesystem::path>;
+using FileStreamIO = IO<std::ifstream>;
+
+// Optional and variant types
+using OptionalStringIO = IO<std::optional<std::string>>;
+using OptionalIntIO = IO<std::optional<int>>;
 
 }  // namespace monad
