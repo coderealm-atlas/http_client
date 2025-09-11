@@ -323,6 +323,43 @@ TEST(ResultVoidTest, CatchThenOnSuccessSkipsHandler) {
   EXPECT_TRUE(recovered.is_ok());
 }
 
+TEST(ResultVoidTest, AndThenChainsVoidToValue) {
+  MyVoidResult result = MyVoidResult::Ok();
+  auto chained = result.and_then([]() {
+    return MyResult<int>::Ok(42);
+  });
+  EXPECT_TRUE(chained.is_ok());
+  EXPECT_EQ(chained.value(), 42);
+}
+
+TEST(ResultVoidTest, AndThenChainsVoidToVoid) {
+  MyVoidResult result = MyVoidResult::Ok();
+  auto chained = result.and_then([]() {
+    return MyVoidResult::Ok();
+  });
+  EXPECT_TRUE(chained.is_ok());
+}
+
+TEST(ResultVoidTest, AndThenPreservesErrorOnVoidResult) {
+  MyVoidResult result = MyVoidResult::Err({404, "Not Found"});
+  auto chained = result.and_then([]() {
+    ADD_FAILURE() << "Should not be called on error";
+    return MyResult<std::string>::Ok("Should not reach here");
+  });
+  EXPECT_TRUE(chained.is_err());
+  EXPECT_EQ(chained.error().code, 404);
+  EXPECT_EQ(chained.error().what, "Not Found");
+}
+
+TEST(ResultVoidTest, AndThenMoveSemantics) {
+  MyVoidResult result = MyVoidResult::Ok();
+  auto chained = std::move(result).and_then([]() {
+    return MyResult<std::string>::Ok("Success");
+  });
+  EXPECT_TRUE(chained.is_ok());
+  EXPECT_EQ(chained.value(), "Success");
+}
+
 TEST(JsonTest, expect_true) {
   using namespace jsonutil;
   json::value jv = {

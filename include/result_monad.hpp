@@ -227,6 +227,26 @@ class Result<void, E> {
 
   Result&& into() && { return std::move(*this); }
 
+  // and_then: void -> Result<U, E> (const version)
+  template <typename F>
+  auto and_then(F&& f) const& -> std::invoke_result_t<F> {
+    using Ret = std::invoke_result_t<F>;
+    static_assert(std::is_same_v<Ret, Result<typename Ret::value_type, E>>,
+                  "and_then must return Result<U,E>");
+    if (is_ok()) return std::invoke(f);
+    return Ret::Err(error());
+  }
+
+  // and_then: void -> Result<U, E> (move version)
+  template <typename F>
+  auto and_then(F&& f) && -> std::invoke_result_t<F> {
+    using Ret = std::invoke_result_t<F>;
+    static_assert(std::is_same_v<Ret, Result<typename Ret::value_type, E>>,
+                  "and_then must return Result<U,E>");
+    if (is_ok()) return std::invoke(f);
+    return Ret::Err(std::move(error()));
+  }
+
   template <typename F>
   auto catch_then(F&& f) const& -> std::invoke_result_t<F, E> {
     using Ret = std::invoke_result_t<F, E>;
