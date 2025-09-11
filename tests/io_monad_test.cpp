@@ -828,4 +828,55 @@ TEST(IOTypeAliasTest, OptionalTypes) {
   });
   EXPECT_TRUE(opt_int_called);
 }
+
+TEST(IOVoidTest, MapToProducesValues) {
+  using namespace monad;
+  
+  // Test map_to converting void to int
+  bool int_called = false;
+  VoidIO::pure().map_to([]() { 
+    return 42; 
+  }).run([&int_called](IntIO::IOResult result) {
+    ASSERT_TRUE(result.is_ok());
+    EXPECT_EQ(result.value(), 42);
+    int_called = true;
+  });
+  EXPECT_TRUE(int_called);
+  
+  // Test map_to converting void to string
+  bool string_called = false;
+  VoidIO::pure().map_to([]() { 
+    return std::string("generated value"); 
+  }).run([&string_called](StringIO::IOResult result) {
+    ASSERT_TRUE(result.is_ok());
+    EXPECT_EQ(result.value(), "generated value");
+    string_called = true;
+  });
+  EXPECT_TRUE(string_called);
+  
+  // Test map_to with error propagation
+  bool error_called = false;
+  VoidIO::fail(Error{404, "Not Found"}).map_to([]() {
+    ADD_FAILURE() << "Should not be called on error";
+    return 99;
+  }).run([&error_called](IntIO::IOResult result) {
+    ASSERT_TRUE(result.is_err());
+    EXPECT_EQ(result.error().code, 404);
+    EXPECT_EQ(result.error().what, "Not Found");
+    error_called = true;
+  });
+  EXPECT_TRUE(error_called);
+  
+  // Test map_to with exception handling
+  bool exception_called = false;
+  VoidIO::pure().map_to([]() -> int {
+    throw std::runtime_error("Something went wrong");
+  }).run([&exception_called](IntIO::IOResult result) {
+    ASSERT_TRUE(result.is_err());
+    EXPECT_EQ(result.error().code, -1);
+    EXPECT_EQ(result.error().what, "Something went wrong");
+    exception_called = true;
+  });
+  EXPECT_TRUE(exception_called);
+}
 }  // namespace

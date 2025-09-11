@@ -623,6 +623,48 @@ class IO<void> {
     });
   }
 
+  /**
+   * Map IO<void> to IO<U> by calling f() and wrapping the result.
+   *
+   * Callable requirements:
+   * - f: void() -> U (where U is not void and not an IO type)
+   *
+   * What NOT to return:
+   * - Do not return IO<U> (use then() for that)
+   * - Do not return Result<U, E> (this wraps the result automatically)
+   *
+   * Error semantics:
+   * - If this IO is an error, f is not called and the error is propagated.
+   * - If f throws, the exception is caught and converted to Error{-1, what()}.
+   *
+   * Usage:
+   *   VoidIO::pure().map_to([]() { return 42; })  // Returns IO<int>
+   */
+  template <typename F>
+  auto map_to(F&& f) const -> IO<std::invoke_result_t<F>> {
+    using U = std::invoke_result_t<F>;
+    static_assert(!std::is_void_v<U>, "Use map() for void-returning functions");
+    static_assert(!std::is_same_v<U, Error>, "Function should not return Error directly");
+    static_assert(!std::is_void_v<U>, "Use map() for void-returning functions");
+    static_assert(!std::is_same_v<U, Error>, "Function should not return Error directly");
+    
+    return IO<U>([prev_ptr = std::make_shared<IO<void>>(*this),
+                  f = std::forward<F>(f)](typename IO<U>::Callback cb) {
+      prev_ptr->run([cb = std::move(cb), f = std::move(f)](IOResult result) mutable {
+        if (result.is_ok()) {
+          try {
+            U value = f();
+            cb(MyResult<U>::Ok(std::move(value)));
+          } catch (const std::exception& e) {
+            cb(MyResult<U>::Err(Error{-1, e.what()}));
+          }
+        } else {
+          cb(MyResult<U>::Err(std::move(result.error())));
+        }
+      });
+    });
+  }
+
   template <typename F>
   /**
    * Flat-map for IO<void>: call f() on success and flatten its IO.
