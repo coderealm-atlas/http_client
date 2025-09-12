@@ -140,3 +140,5 @@ file(GLOB LIB_SOURCES ${CMAKE_SOURCE_DIR}/src/*.cpp)
 # ---------------- Subdirectories ----------------
 enable_testing()
 add_subdirectory(tests)
+
+

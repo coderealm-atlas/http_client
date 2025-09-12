@@ -48,6 +48,10 @@ fixtures/temp_pack_file
 temp_pack_file*
 CMakeUserPresets.json
 
+# Examples build artifacts
+examples/build/
+examples/basic_usage_example
+
 .env_local
 .env_prod_local
 test-results/
