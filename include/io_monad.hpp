@@ -1,6 +1,7 @@
 #pragma once
 
 #include <boost/asio.hpp>
+#include <boost/json.hpp>
 #include <chrono>
 #include <cstdint>
 #include <exception>
@@ -9,12 +10,12 @@
 #include <functional>
 #include <memory>
 #include <optional>
+#include <string>
 #include <type_traits>
 #include <utility>
 #include <variant>
 #include <vector>
 
-#include <boost/json.hpp>
 #include "result_monad.hpp"
 
 // This is a simple IO monad implementation in C++.
@@ -24,6 +25,18 @@ namespace monad {
 
 template <typename T>
 class IO;
+
+// type trait to detect IO<U>
+// Trait to detect IO<U> at compile time; defaults to false.
+template <typename X>
+struct is_io : std::false_type {};
+
+template <typename U>
+struct is_io<IO<U>> : std::true_type {};
+
+// Helper variable template for easier usage
+template <typename X>
+inline constexpr bool is_io_v = is_io<X>::value;
 
 namespace detail {
 inline void cancel_timer(boost::asio::steady_timer& timer) { timer.cancel(); }
@@ -86,6 +99,16 @@ class IO {
   using IOResult = Result<T, Error>;
   using Callback = std::function<void(IOResult)>;
 
+  /**
+   * Construct from a thunk that accepts a `Callback` and eventually calls it
+   * with `Result<T, Error>`. The thunk should call the callback exactly once.
+   * No execution occurs until `run()` is invoked.
+   */
+  /**
+   * Construct from a thunk that accepts a `Callback` and eventually calls it
+   * with `Result<std::monostate, Error>`. The thunk should call the callback
+   * exactly once. No execution occurs until `run()` is invoked.
+   */
   explicit IO(std::function<void(Callback)> thunk) : thunk_(std::move(thunk)) {}
 
   /**
@@ -216,8 +239,7 @@ class IO {
    */
   auto then(F&& f) const {
     using NextIO = std::invoke_result_t<F, T>;
-    static_assert(std::is_same_v<decltype(f(std::declval<T>())), NextIO>,
-                  "then() must return IO<U>");
+    static_assert(is_io_v<NextIO>, "then() must return IO<U>");
 
     auto f_wrapped = std::make_shared<std::decay_t<F>>(std::forward<F>(f));
     auto prev_ptr = std::make_shared<IO<T>>(*this);
@@ -225,10 +247,7 @@ class IO {
       prev_ptr->run([f_wrapped, cb = std::move(cb)](IOResult result) mutable {
         if (result.is_ok()) {
           try {
-            if constexpr (std::is_same_v<T, void>)
-              (*f_wrapped)().run(std::move(cb));
-            else
-              (*f_wrapped)(std::move(result.value())).run(std::move(cb));
+            (*f_wrapped)(std::move(result.value())).run(std::move(cb));
           } catch (const std::exception& e) {
             cb(Error{-2, e.what()});
           }
@@ -284,12 +303,14 @@ class IO {
    * - Do not return IO<...> or throw to recover. To recover asynchronously, use
    * catch_then(). map_err() is for pure Error-to-Error transformation only.
    */
-  IO<T> map_err(std::function<Error(Error)> f) const {
-    return IO<T>([prev = *this, f = std::move(f)](typename IO<T>::Callback cb) {
+  template <typename F>
+  IO<T> map_err(F&& f) const {
+    auto f_ptr = std::make_shared<std::decay_t<F>>(std::forward<F>(f));
+    return IO<T>([prev = *this, f_ptr](typename IO<T>::Callback cb) mutable {
       prev.run(
-          [f, cb = std::move(cb)](typename IO<T>::IOResult result) mutable {
+          [f_ptr, cb = std::move(cb)](typename IO<T>::IOResult result) mutable {
             if (result.is_err()) {
-              cb(f(result.error()));
+              cb((*f_ptr)(result.error()));
             } else {
               cb(std::move(result));
             }
@@ -311,10 +332,12 @@ class IO {
    * - Finalizer exceptions are not caught here; ensure f() is noexcept if
    * needed.
    */
-  IO<T> finally(std::function<void()> f) const {
-    return IO<T>([prev = *this, f = std::move(f)](Callback cb) {
-      prev.run([f, cb = std::move(cb)](IOResult result) mutable {
-        f();
+  template <typename F>
+  IO<T> finally(F&& f) const {
+    auto f_ptr = std::make_shared<std::decay_t<F>>(std::forward<F>(f));
+    return IO<T>([prev = *this, f_ptr](Callback cb) mutable {
+      prev.run([f_ptr, cb = std::move(cb)](IOResult result) mutable {
+        (*f_ptr)();
         cb(std::move(result));
       });
     });
@@ -471,7 +494,7 @@ class IO {
       *try_run = [=](std::chrono::milliseconds current_delay) mutable {
         (*attempt)++;
         self_ptr->clone().run([=](auto r) mutable {
-          if (r.is_ok() || *attempt >= max_attempts || !r.is_err() ||
+          if (r.is_ok() || *attempt >= max_attempts ||
               !should_retry(r.error())) {
             cb(std::move(r));
           } else {
@@ -631,7 +654,7 @@ class IO<void> {
    *
    * What NOT to return:
    * - Do not return IO<U> (use then() for that)
-   * - Do not return Result<U, E> (this wraps the result automatically)
+   * - Do not return Result<U, E> or Error (this wraps the result automatically)
    *
    * Error semantics:
    * - If this IO is an error, f is not called and the error is propagated.
@@ -644,24 +667,25 @@ class IO<void> {
   auto map_to(F&& f) const -> IO<std::invoke_result_t<F>> {
     using U = std::invoke_result_t<F>;
     static_assert(!std::is_void_v<U>, "Use map() for void-returning functions");
-    static_assert(!std::is_same_v<U, Error>, "Function should not return Error directly");
-    static_assert(!std::is_void_v<U>, "Use map() for void-returning functions");
-    static_assert(!std::is_same_v<U, Error>, "Function should not return Error directly");
-    
+    static_assert(!std::is_same_v<U, Error>,
+                  "Function should not return Error directly");
+    static_assert(!is_io_v<U>, "Return IO via then(), not map_to()");
+
     return IO<U>([prev_ptr = std::make_shared<IO<void>>(*this),
                   f = std::forward<F>(f)](typename IO<U>::Callback cb) {
-      prev_ptr->run([cb = std::move(cb), f = std::move(f)](IOResult result) mutable {
-        if (result.is_ok()) {
-          try {
-            U value = f();
-            cb(MyResult<U>::Ok(std::move(value)));
-          } catch (const std::exception& e) {
-            cb(MyResult<U>::Err(Error{-1, e.what()}));
-          }
-        } else {
-          cb(MyResult<U>::Err(std::move(result.error())));
-        }
-      });
+      prev_ptr->run(
+          [cb = std::move(cb), f = std::move(f)](IOResult result) mutable {
+            if (result.is_ok()) {
+              try {
+                U value = f();
+                cb(MyResult<U>::Ok(std::move(value)));
+              } catch (const std::exception& e) {
+                cb(MyResult<U>::Err(Error{-1, e.what()}));
+              }
+            } else {
+              cb(MyResult<U>::Err(std::move(result.error())));
+            }
+          });
     });
   }
 
@@ -683,6 +707,7 @@ class IO<void> {
    */
   auto then(F&& f) const -> decltype(f()) {
     using NextIO = decltype(f());
+    static_assert(is_io_v<NextIO>, "then() must return IO<U>");
     auto f_wrapped = std::make_shared<std::decay_t<F>>(std::forward<F>(f));
     auto prev_ptr = std::make_shared<IO<void>>(*this);
     return NextIO([prev_ptr, f_wrapped](typename NextIO::Callback cb) mutable {
@@ -744,11 +769,13 @@ class IO<void> {
    * - Do not return IO<...> or throw to recover. To recover asynchronously, use
    * catch_then().
    */
-  IO<void> map_err(std::function<Error(Error)> f) const {
-    return IO<void>([prev = *this, f = std::move(f)](Callback cb) {
-      prev.run([f, cb = std::move(cb)](IOResult result) mutable {
+  template <typename F>
+  IO<void> map_err(F&& f) const {
+    auto f_ptr = std::make_shared<std::decay_t<F>>(std::forward<F>(f));
+    return IO<void>([prev = *this, f_ptr](Callback cb) mutable {
+      prev.run([f_ptr, cb = std::move(cb)](IOResult result) mutable {
         if (result.is_err()) {
-          cb(f(result.error()));
+          cb((*f_ptr)(result.error()));
         } else {
           cb(std::move(result));
         }
@@ -770,10 +797,12 @@ class IO<void> {
    * - Finalizer exceptions are not caught here; ensure f() is noexcept if
    * needed.
    */
-  IO<void> finally(std::function<void()> f) const {
-    return IO<void>([prev = *this, f = std::move(f)](Callback cb) {
-      prev.run([f, cb = std::move(cb)](IOResult result) mutable {
-        f();
+  template <typename F>
+  IO<void> finally(F&& f) const {
+    auto f_ptr = std::make_shared<std::decay_t<F>>(std::forward<F>(f));
+    return IO<void>([prev = *this, f_ptr](Callback cb) mutable {
+      prev.run([f_ptr, cb = std::move(cb)](IOResult result) mutable {
+        (*f_ptr)();
         cb(std::move(result));
       });
     });
