@@ -32,7 +32,7 @@ using WithMessageVoid = WithMessage<void>;
 struct Error {
   int code;
   std::string what;
-  std::string status;
+  std::string key;
   int response_status = 500;  // Default HTTP status code
   json::object params;
   std::string content_type = "application/json";
@@ -43,7 +43,7 @@ struct Error {
     json::object jo;
     jo["code"] = e.code;
     jo["what"] = e.what;
-    jo["status"] = e.status;
+    jo["key"] = e.key;
     jo["params"] = e.params;
     jv = std::move(jo);
   }
