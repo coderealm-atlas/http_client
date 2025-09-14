@@ -29,7 +29,7 @@ Notes: Presets expect vcpkg; set `VCPKG_DIR` and optionally `CORES` for parallel
 - Framework: GoogleTest via CTest (`enable_testing()`); targets live under `tests/` and end with `_test`.
 - Add new tests in `tests/`, name files `<area>_test.cpp`, and register through `tests/CMakeLists.txt` if not already globbed.
 - Run locally with `ctest` from the build directory; include clear assertions and minimal fixtures.
-- Network tests: external network-dependent suites are labeled `network`. Run non-network tests with `ctest -LE network --test-dir build`. To disable network tests at configure time, set `HTTPCLIENT_SKIP_NETWORK_TESTS=1 cmake --preset debug-t630`.
+- Network tests: external network-dependent suites are labeled `network`. Run non-network tests with `ctest -LE network --test-dir build`. To disable network tests at configure time, set `HTTPCLIENT_SKIP_NETWORK_TESTS=1 cmake --preset debug`.
 
 ## Commit & Pull Request Guidelines
 - Commits: follow Conventional Commits (e.g., `feat:`, `fix:`, `refactor:`) with imperative, concise subjects.

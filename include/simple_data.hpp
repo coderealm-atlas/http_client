@@ -533,16 +533,16 @@ struct Permission {
 };
 
 struct SessionAttributes {
-  std::optional<uint64_t> user_id;
+  std::optional<int64_t> user_id;
   std::optional<std::string> user_name;
   std::optional<std::string> user_email;
-  std::optional<uint64_t> created_at;
-  std::optional<uint64_t> user_quota_id;
+  std::optional<int64_t> created_at;
+  std::optional<int64_t> user_quota_id;
   std::vector<std::string> user_roles;
   std::vector<Permission> user_permissions;
   AuthBy auth_by = AuthBy::USERNAME_PASSWORD;
 
-  uint64_t user_id_or_throw() {
+  int64_t user_id_or_throw() {
     if (user_id) {
       return user_id.value();
     }
@@ -602,7 +602,7 @@ struct SessionAttributes {
     SessionAttributes sa;
     if (auto* jo_p = jv.if_object()) {
       if (auto* user_id_p = jo_p->if_contains("user_id")) {
-        sa.user_id.emplace(user_id_p->to_number<uint64_t>());
+        sa.user_id.emplace(user_id_p->to_number<int64_t>());
       }
       if (auto* user_name_p = jo_p->if_contains("user_name")) {
         sa.user_name.emplace(user_name_p->as_string());
@@ -611,10 +611,10 @@ struct SessionAttributes {
         sa.user_email.emplace(user_email_p->as_string());
       }
       if (auto* created_at_p = jo_p->if_contains("created_at")) {
-        sa.created_at.emplace(created_at_p->to_number<uint64_t>());
+        sa.created_at.emplace(created_at_p->to_number<int64_t>());
       }
       if (auto* user_quota_id_p = jo_p->if_contains("user_quota_id")) {
-        sa.user_quota_id.emplace(user_quota_id_p->to_number<uint64_t>());
+        sa.user_quota_id.emplace(user_quota_id_p->to_number<int64_t>());
       }
       if (auto* user_roles_p = jo_p->if_contains("user_roles")) {
         sa.user_roles = json::value_to<std::vector<std::string>>(*user_roles_p);

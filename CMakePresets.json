@@ -132,7 +132,7 @@
       }
     },
     {
-      "name": "debug-t630",
+      "name": "debug",
       "inherits": "default",
       "description": "Debug build t630",
       "environment": {
@@ -242,8 +242,8 @@
       "configurePreset": "default"
     },
     {
-      "name": "debug-t630",
-      "configurePreset": "debug-t630"
+      "name": "debug",
+      "configurePreset": "debug"
     },
     {
       "name": "release",
