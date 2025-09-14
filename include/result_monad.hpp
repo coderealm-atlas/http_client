@@ -2,6 +2,8 @@
 #pragma once
 
 #include <boost/json.hpp>
+#include <cstddef>
+#include <cstdint>
 #include <format>
 #include <functional>
 #include <limits>
@@ -414,6 +416,18 @@ class Result<void, E> {
 template <typename T>
 using MyResult = monad::Result<T, Error>;
 using MyVoidResult = Result<void, Error>;
+
+// Common Result aliases (E = Error)
+using StringResult = Result<std::string, Error>;
+using BoolResult = Result<bool, Error>;
+using IntResult = Result<int, Error>;
+using Int64Result = Result<int64_t, Error>;
+using UInt64Result = Result<uint64_t, Error>;
+using SizeTResult = Result<std::size_t, Error>;
+using JsonValueResult = Result<json::value, Error>;
+using JsonObjectResult = Result<json::object, Error>;
+using JsonArrayResult = Result<json::array, Error>;
+using VoidResult = Result<void, Error>;
 
 // Free helpers mirroring v2 combinators
 
