@@ -15,18 +15,16 @@
 #include <memory>
 
 #include "api_handler_base.hpp"
-#include "boost/di.hpp"
 #include "client_ssl_ctx.hpp"
 #include "http_client_config_provider.hpp"
 #include "http_client_manager.hpp"
 #include "http_client_monad.hpp"
 #include "io_context_manager.hpp"
-#include "ioc_manager_config_provider.hpp"
 #include "log_stream.hpp"
 #include "misc_util.hpp"
-#include "result_monad.hpp"
 #include "server_certificate.hpp"
 #include "simple_data.hpp"
+#include "boost/di.hpp" 
 
 static cjj365::ConfigSources& config_sources() {
   static cjj365::ConfigSources instance({fs::path{"tests/config_dir"}}, {});

@@ -176,18 +176,19 @@ class Connection : public std::enable_shared_from_this<Connection> {
 class ConnectionPool {
   // Monadic acquire: returns IO<Connection::Ptr>
   monad::IO<Connection::Ptr> acquire_monad(Origin origin) {
-    return monad::IO<Connection::Ptr>(
-        [this, origin = std::move(origin)](auto cb) mutable {
-          this->acquire(std::move(origin),
-                        [cb = std::move(cb)](boost::system::error_code ec,
-                                             Connection::Ptr c) mutable {
-                          if (ec || !c) {
-                            cb(monad::Error{ec.value(), ec.message()});
-                          } else {
-                            cb(std::move(c));
-                          }
-                        });
-        });
+    return monad::IO<Connection::Ptr>([this, origin = std::move(origin)](
+                                          auto cb) mutable {
+      this->acquire(std::move(origin), [cb = std::move(cb)](
+                                           boost::system::error_code ec,
+                                           Connection::Ptr c) mutable {
+        if (ec || !c) {
+          cb(monad::Result<Connection::Ptr, monad::Error>::Err(
+              monad::Error{ec.value(), ec.message()}));
+        } else {
+          cb(monad::Result<Connection::Ptr, monad::Error>::Ok(std::move(c)));
+        }
+      });
+    });
   }
 
   // Monadic async_request: returns IO<http::response<ResBody>>
@@ -197,15 +198,17 @@ class ConnectionPool {
     using ResponseT = http::response<ResBody>;
     return monad::IO<ResponseT>([this, origin = std::move(origin),
                                  req = std::move(req)](auto cb) mutable {
-      this->async_request(std::move(origin), std::move(req),
-                          [cb = std::move(cb)](boost::system::error_code ec,
-                                               auto, ResponseT res) mutable {
-                            if (ec) {
-                              cb(monad::Error{ec.value(), ec.message()});
-                            } else {
-                              cb(std::move(res));
-                            }
-                          });
+      this->async_request(
+          std::move(origin), std::move(req),
+          [cb = std::move(cb)](boost::system::error_code ec, auto,
+                               ResponseT res) mutable {
+            if (ec) {
+              cb(monad::Result<ResponseT, monad::Error>::Err(
+                  monad::Error{ec.value(), ec.message()}));
+            } else {
+              cb(monad::Result<ResponseT, monad::Error>::Ok(std::move(res)));
+            }
+          });
     });
   }
 

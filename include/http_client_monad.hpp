@@ -168,8 +168,9 @@ struct HttpExchange {
 
   template <typename T>
   MyResult<T> parseJsonResponse() {
-    return getJsonResponse().and_then(
-        [](json::value jv) -> MyResult<T> { return json::value_to<T>(jv); });
+    return getJsonResponse().and_then([](json::value jv) -> MyResult<T> {
+      return MyResult<T>::Ok(json::value_to<T>(jv));
+    });
   }
 
   MyResult<json::value> getJsonResponse() {
@@ -180,7 +181,7 @@ struct HttpExchange {
           return MyResult<json::value>::Err(
               Error{400, "Response body is empty"});
         }
-        return json::parse(response_string);
+        return MyResult<json::value>::Ok(json::parse(response_string));
       } else {
         return MyResult<json::value>::Err(
             Error{400, "Response is not available or empty"});
@@ -279,8 +280,8 @@ ExchangeIOFor<Tag>
   // convert to owned type.
   return monad::IO<ExchangePtr>([url = urls::url(url_view)](auto cb) {
     auto make_exchange = [url, cb = std::move(cb)](Req&& req) {
-      cb(ExchangePtr{
-          std::make_shared<HttpExchange<Req, Res>>(url, std::move(req))});
+      cb(monad::Result<ExchangePtr, monad::Error>::Ok(
+          std::make_shared<HttpExchange<Req, Res>>(url, std::move(req))));
     };
 
     if constexpr (std::is_same_v<Tag, GetStatusTag>) {
@@ -331,11 +332,12 @@ auto http_request_io(HttpClientManager& pool, int verbose = 0) {
           [cb = std::move(cb), ex](std::optional<Res> resp, int err) mutable {
             if (err == 0 && resp.has_value()) {
               ex->response = std::move(resp);
-              cb(std::move(ex));
+              cb(monad::Result<ExchangePtr, monad::Error>::Ok(std::move(ex)));
             } else {
               BOOST_LOG_SEV(ex->lg, trivial::error)
                   << "http_request_io failed with error num: " << err;
-              cb(monad::Error{err, "http_request_io failed"});
+              cb(monad::Result<ExchangePtr, monad::Error>::Err(
+                  monad::Error{err, "http_request_io failed"}));
             }
           },
           {

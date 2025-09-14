@@ -7,9 +7,8 @@
 #include <utility>
 #include <vector>
 
-#include "result_monad_v2.hpp"
-
-namespace v2 = monad::v2;
+#include "result_monad.hpp"
+using monad::Result;
 
 struct TestError {
   int code{};
@@ -20,7 +19,7 @@ struct TestError {
 };
 
 TEST(ResultV2, Basics_Construction_And_Introspection) {
-  using R = v2::Result<int, TestError>;
+  using R = Result<int, TestError>;
 
   R ok = R::Ok(5);
   EXPECT_TRUE(ok.is_ok());
@@ -41,15 +40,15 @@ TEST(ResultV2, Basics_Construction_And_Introspection) {
 }
 
 TEST(ResultV2, Map_Copy_And_Move) {
-  using R = v2::Result<int, TestError>;
+  using R = Result<int, TestError>;
   R ok = R::Ok(7);
 
   auto r2 = ok.map([](const int& x) { return x + 1; });
-  static_assert(std::is_same_v<decltype(r2), v2::Result<int, TestError>>);
+  static_assert(std::is_same_v<decltype(r2), Result<int, TestError>>);
   ASSERT_TRUE(r2);
   EXPECT_EQ(r2.value(), 8);
 
-  using RS = v2::Result<std::string, TestError>;
+  using RS = Result<std::string, TestError>;
   RS s = RS::Ok(std::string{"hi"});
   auto r3 = std::move(s).map([](std::string&& x) { return x + "!"; });
   ASSERT_TRUE(r3);
@@ -57,40 +56,45 @@ TEST(ResultV2, Map_Copy_And_Move) {
 }
 
 TEST(ResultV2, AndThen_Success_And_Error) {
-  using R = v2::Result<int, TestError>;
+  using R = Result<int, TestError>;
   R ok = R::Ok(3);
   R er = R::Err(TestError{2, "e"});
 
-  auto doubled = ok.and_then([](int x) { return v2::Result<int, TestError>::Ok(x * 2); });
+  auto doubled =
+      ok.and_then([](int x) { return Result<int, TestError>::Ok(x * 2); });
   ASSERT_TRUE(doubled);
   EXPECT_EQ(doubled.value(), 6);
 
-  auto still_err = er.and_then([](int) { return v2::Result<int, TestError>::Ok(0); });
+  auto still_err =
+      er.and_then([](int) { return Result<int, TestError>::Ok(0); });
   ASSERT_TRUE(still_err.is_err());
   EXPECT_EQ(still_err.error().code, 2);
 }
 
 TEST(ResultV2, MapErr_And_CatchThen_Change_Error_Type) {
-  v2::Result<int, TestError> er = v2::Result<int, TestError>::Err(TestError{3, "x"});
-  auto mapped = er.map_err([](const TestError& e) { return std::string{"E:"} + e.what; });
-  static_assert(std::is_same_v<decltype(mapped), v2::Result<int, std::string>>);
+  Result<int, TestError> er = Result<int, TestError>::Err(TestError{3, "x"});
+  auto mapped =
+      er.map_err([](const TestError& e) { return std::string{"E:"} + e.what; });
+  static_assert(std::is_same_v<decltype(mapped), Result<int, std::string>>);
   ASSERT_TRUE(mapped.is_err());
   EXPECT_EQ(mapped.error(), "E:x");
 
   // catch_then converts error type; value type must remain the same
-  v2::Result<int, TestError> ok = v2::Result<int, TestError>::Ok(9);
-  auto kept_ok = ok.catch_then([](const TestError&) { return v2::Result<int, std::string>::Err("no"); });
+  Result<int, TestError> ok = Result<int, TestError>::Ok(9);
+  auto kept_ok = ok.catch_then(
+      [](const TestError&) { return Result<int, std::string>::Err("no"); });
   ASSERT_TRUE(kept_ok);
   EXPECT_EQ(kept_ok.value(), 9);
 
-  auto converted = er.catch_then(
-      [](const TestError& e) { return v2::Result<int, std::string>::Err(std::to_string(e.code)); });
+  auto converted = er.catch_then([](const TestError& e) {
+    return Result<int, std::string>::Err(std::to_string(e.code));
+  });
   ASSERT_TRUE(converted.is_err());
   EXPECT_EQ(converted.error(), "3");
 }
 
 TEST(ResultV2, OrElse_And_ValueOr) {
-  using R = v2::Result<int, TestError>;
+  using R = Result<int, TestError>;
   R ok = R::Ok(4);
   R er = R::Err(TestError{5, "bad"});
 
@@ -108,7 +112,7 @@ TEST(ResultV2, OrElse_And_ValueOr) {
 }
 
 TEST(ResultV2, Visit_And_Equality_Swap) {
-  using R = v2::Result<int, TestError>;
+  using R = Result<int, TestError>;
   R a = R::Ok(10);
   R b = R::Ok(10);
   EXPECT_TRUE(a == b);
@@ -128,7 +132,7 @@ TEST(ResultV2, Visit_And_Equality_Swap) {
 }
 
 TEST(ResultV2, Optional_And_MoveOnly_Value) {
-  using R = v2::Result<std::unique_ptr<int>, TestError>;
+  using R = Result<std::unique_ptr<int>, TestError>;
   R r = R::Ok(std::make_unique<int>(3));
   auto opt = std::move(r).as_optional();
   ASSERT_TRUE(opt.has_value());
@@ -137,8 +141,8 @@ TEST(ResultV2, Optional_And_MoveOnly_Value) {
 }
 
 TEST(ResultV2, Void_Specialization_Flows) {
-  using RV = v2::Result<void, TestError>;
-  using RI = v2::Result<int, TestError>;
+  using RV = Result<void, TestError>;
+  using RI = Result<int, TestError>;
 
   RV ok = RV::Ok();
   auto next = ok.and_then([] { return RI::Ok(1); });
@@ -146,40 +150,45 @@ TEST(ResultV2, Void_Specialization_Flows) {
   EXPECT_EQ(next.value(), 1);
 
   RV er = RV::Err(TestError{6, "v"});
-  auto recovered_void = er.catch_then([](const TestError&) { return RV::Ok(); });
+  auto recovered_void =
+      er.catch_then([](const TestError&) { return RV::Ok(); });
   ASSERT_TRUE(recovered_void.is_ok());
 
-  auto mapped_err = er.map_err([](const TestError& e) { return std::string{"v:"} + e.what; });
-  static_assert(std::is_same_v<decltype(mapped_err), v2::Result<void, std::string>>);
+  auto mapped_err =
+      er.map_err([](const TestError& e) { return std::string{"v:"} + e.what; });
+  static_assert(
+      std::is_same_v<decltype(mapped_err), Result<void, std::string>>);
   ASSERT_TRUE(mapped_err.is_err());
   EXPECT_EQ(mapped_err.error(), "v:v");
 }
 
 TEST(ResultV2, AllOk_ZipResults_NonVoid) {
-  using R1 = v2::Result<int, TestError>;
-  using R2 = v2::Result<std::string, TestError>;
-  using R3 = v2::Result<double, TestError>;
+  using R1 = Result<int, TestError>;
+  using R2 = Result<std::string, TestError>;
+  using R3 = Result<double, TestError>;
 
-  auto t = v2::zip_results<TestError>(R1::Ok(1), R2::Ok("a"), R3::Ok(2.5));
+  auto t = monad::zip_results<TestError>(R1::Ok(1), R2::Ok("a"), R3::Ok(2.5));
   ASSERT_TRUE(t);
   auto [i, s, d] = t.value();
   EXPECT_EQ(i, 1);
   EXPECT_EQ(s, "a");
   EXPECT_DOUBLE_EQ(d, 2.5);
 
-  auto err_first = v2::zip_results<TestError>(R1::Err(TestError{7, "e1"}), R2::Ok("x"));
+  auto err_first =
+      monad::zip_results<TestError>(R1::Err(TestError{7, "e1"}), R2::Ok("x"));
   ASSERT_TRUE(err_first.is_err());
   EXPECT_EQ(err_first.error().code, 7);
 
-  auto err_second = v2::zip_results<TestError>(R1::Ok(2), R2::Err(TestError{8, "e2"}));
+  auto err_second =
+      monad::zip_results<TestError>(R1::Ok(2), R2::Err(TestError{8, "e2"}));
   ASSERT_TRUE(err_second.is_err());
   EXPECT_EQ(err_second.error().code, 8);
 }
 
 TEST(ResultV2, ZipResults_Rvalue_Moves) {
-  using RU = v2::Result<std::unique_ptr<int>, TestError>;
-  auto r = v2::zip_results<TestError>(RU::Ok(std::make_unique<int>(9)),
-                                      RU::Ok(std::make_unique<int>(10)));
+  using RU = Result<std::unique_ptr<int>, TestError>;
+  auto r = monad::zip_results<TestError>(RU::Ok(std::make_unique<int>(9)),
+                                         RU::Ok(std::make_unique<int>(10)));
   ASSERT_TRUE(r);
   auto [p, q] = std::move(r).value();
   ASSERT_TRUE(p && q);
@@ -188,11 +197,12 @@ TEST(ResultV2, ZipResults_Rvalue_Moves) {
 }
 
 TEST(ResultV2, ZipResults_SkipVoid_Mixed) {
-  using RI = v2::Result<int, TestError>;
-  using RS = v2::Result<std::string, TestError>;
-  using RV = v2::Result<void, TestError>;
+  using RI = Result<int, TestError>;
+  using RS = Result<std::string, TestError>;
+  using RV = Result<void, TestError>;
 
-  auto z = v2::zip_results_skip_void<TestError>(RI::Ok(3), RV::Ok(), RS::Ok("z"));
+  auto z =
+      monad::zip_results_skip_void<TestError>(RI::Ok(3), RV::Ok(), RS::Ok("z"));
   ASSERT_TRUE(z);
   auto [i, s] = z.value();
   EXPECT_EQ(i, 3);
@@ -200,22 +210,23 @@ TEST(ResultV2, ZipResults_SkipVoid_Mixed) {
 }
 
 TEST(ResultV2, CollectResults_Vector_And_InitList) {
-  using R = v2::Result<int, TestError>;
+  using R = Result<int, TestError>;
   std::vector<R> items = {R::Ok(1), R::Ok(2), R::Ok(3)};
-  auto coll = v2::collect_results<int, TestError>(items);
+  auto coll = monad::collect_results<int, TestError>(items);
   ASSERT_TRUE(coll);
   EXPECT_EQ(coll.value().size(), 3u);
   EXPECT_EQ(coll.value()[0], 1);
 
-  auto coll2 = v2::collect_results<int, TestError>({R::Ok(4), R::Ok(5)});
+  auto coll2 = monad::collect_results<int, TestError>({R::Ok(4), R::Ok(5)});
   ASSERT_TRUE(coll2);
   EXPECT_EQ(coll2.value().size(), 2u);
 
-  auto coll_move = v2::collect_results<int, TestError>(std::move(items));
+  auto coll_move = monad::collect_results<int, TestError>(std::move(items));
   ASSERT_TRUE(coll_move);
   EXPECT_EQ(coll_move.value().size(), 3u);
 
-  auto fail = v2::collect_results<int, TestError>({R::Ok(1), R::Err(TestError{9, "n"})});
+  auto fail = monad::collect_results<int, TestError>(
+      {R::Ok(1), R::Err(TestError{9, "n"})});
   ASSERT_TRUE(fail.is_err());
   EXPECT_EQ(fail.error().code, 9);
 }

@@ -182,6 +182,7 @@ target_include_directories(${T_NAME}
 target_link_libraries(
     ${T_NAME}
     PRIVATE GTest::gtest GTest::gtest_main GTest::gmock GTest::gmock_main
+    PRIVATE Boost::json
 )
 add_test(
     NAME ${T_NAME}
