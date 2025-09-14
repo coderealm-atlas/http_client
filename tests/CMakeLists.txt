@@ -149,6 +149,45 @@ add_test(
     COMMAND ${T_NAME}
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 
+# ----------------------------io_monad_v2_test.cpp------------------------------
+set(T_NAME io_monad_v2_test)
+add_executable(${T_NAME}
+    io_monad_v2_test.cpp
+)
+target_include_directories(${T_NAME}
+    PUBLIC ${CMAKE_SOURCE_DIR}/include
+    PRIVATE ./include
+)
+target_link_libraries(
+    ${T_NAME}
+    PRIVATE GTest::gtest GTest::gtest_main GTest::gmock GTest::gmock_main
+    PUBLIC 
+        Boost::asio
+        Boost::json
+)
+add_test(
+    NAME ${T_NAME}
+    COMMAND ${T_NAME}
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+
+# ----------------------------result_monad_v2_test.cpp------------------------------
+set(T_NAME result_monad_v2_test)
+add_executable(${T_NAME}
+    result_monad_v2_test.cpp
+)
+target_include_directories(${T_NAME}
+    PUBLIC ${CMAKE_SOURCE_DIR}/include
+    PRIVATE ./include
+)
+target_link_libraries(
+    ${T_NAME}
+    PRIVATE GTest::gtest GTest::gtest_main GTest::gmock GTest::gmock_main
+)
+add_test(
+    NAME ${T_NAME}
+    COMMAND ${T_NAME}
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+
 # ----------------------------urls_test.cpp------------------------------
 set(T_NAME urls_test)
 add_executable(${T_NAME}  

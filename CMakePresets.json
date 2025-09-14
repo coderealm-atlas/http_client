@@ -20,145 +20,9 @@
       }
     },
     {
-      "name": "release",
-      "inherits": "default",
-      "description": "Release build",
-      "generator": "Ninja",
-      "cacheVariables": {
-        "CMAKE_BUILD_TYPE": "Release",
-        "VCPKG_TARGET_TRIPLET": "x64-linux-cpp20",
-        "CMAKE_TOOLCHAIN_FILE": "$env{VCPKG_DIR}/vcpkg/scripts/buildsystems/vcpkg.cmake"
-      },
-      "environment": {
-        "CMAKE_BUILD_PARALLEL_LEVEL": "$env{CORES}"
-      }
-    },
-    {
-      "name": "docker-release",
-      "inherits": "release",
-      "environment": {
-        "VCPKG_DEFAULT_BINARY_CACHE": "/app/vcpkg_binary_cache",
-        "CXX": "/usr/bin/clang++",
-        "CC": "/usr/bin/clang"
-      },
-      "cacheVariables": {
-        "CMAKE_TOOLCHAIN_FILE": "/app/external/vcpkg/scripts/buildsystems/vcpkg.cmake",
-        "CMAKE_C_COMPILER_LAUNCHER": "ccache",
-        "CMAKE_CXX_COMPILER_LAUNCHER": "ccache",
-        "CMAKE_CUDA_COMPILER_LAUNCHER": "ccache",
-        "CMAKE_CXX_COMPILER": "/usr/bin/clang++",
-        "CMAKE_C_COMPILER": "/usr/bin/clang",
-        "THREADS_PREFER_PTHREAD_FLAG": "ON",
-        "CMAKE_EXE_LINKER_FLAGS": "-fuse-ld=lld -pthread"
-      }
-    },
-    {
-      "name": "clang-msvc-debug-office",
-      "displayName": "Clang with MSVC Toolchain Office (Debug)",
-      "description": "Uses Clang with the MSVC toolchain for debug builds.",
-      "generator": "Ninja",
-      "binaryDir": "${sourceDir}/build/clang-msvc-debug",
-      "cacheVariables": {
-        "CMAKE_C_COMPILER": "clang-cl",
-        "CMAKE_CXX_COMPILER": "clang-cl",
-        "CMAKE_BUILD_TYPE": "Debug",
-        "VCPKG_DEFAULT_BINARY_CACHE": "D:/vcpkg/vcpkg_binary_cache"
-      },
-      "toolchainFile": "D:/vcpkg/scripts/buildsystems/vcpkg.cmake"
-    },
-    {
-      "name": "clang-msvc-debug-office-cl",
-      "displayName": "Clang with MSVC Toolchain Office (Debug) cl.exe",
-      "description": "Uses Clang with the MSVC toolchain for debug builds.",
-      "generator": "Ninja",
-      "binaryDir": "${sourceDir}/build/clang-msvc-debug",
-      "cacheVariables": {
-        "CMAKE_C_COMPILER": "cl",
-        "CMAKE_CXX_COMPILER": "cl",
-        "CMAKE_C_FLAGS": "/Zc:preprocessor /bigobj /D_WIN32_WINNT=0x0A00 /EHsc /utf-8",
-        "CMAKE_CXX_FLAGS": "/Zc:preprocessor /bigobj /D_WIN32_WINNT=0x0A00 /EHsc /utf-8",
-        "CMAKE_BUILD_TYPE": "Debug",
-        "VCPKG_DEFAULT_BINARY_CACHE": "D:/vcpkg/vcpkg_binary_cache"
-      },
-      "toolchainFile": "D:/vcpkg/scripts/buildsystems/vcpkg.cmake"
-    },
-    {
-      "name": "debug",
-      "inherits": "default",
-      "description": "Debug build",
-      "environment": {
-        "ASAN_OPTIONS": "allocator_may_return_null=1",
-        "CMAKE_BUILD_PARALLEL_LEVEL": "6",
-        "CCACHE_BASEDIR": "/home/jianglibo/bb",
-        "VCPKG_DEFAULT_BINARY_CACHE": "$env{VCPKG_DIR}/vcpkg_binary_cache"
-      },
-      "cacheVariables": {
-        "CMAKE_BUILD_TYPE": "Debug",
-        "ENABLE_ASAN": "OFF",
-        "VCPKG_TARGET_TRIPLET": "x64-linux-dynamic-link-cpp20",
-        "CMAKE_TOOLCHAIN_FILE": "$env{VCPKG_DIR}/vcpkg/scripts/buildsystems/vcpkg.cmake",
-        "CMAKE_C_COMPILER_LAUNCHER": "ccache",
-        "CMAKE_CXX_COMPILER_LAUNCHER": "ccache",
-        "CMAKE_CUDA_COMPILER_LAUNCHER": "ccache",
-        "CMAKE_CXX_COMPILER": "/usr/bin/clang++",
-        "CMAKE_C_COMPILER": "/usr/bin/clang",
-        "THREADS_PREFER_PTHREAD_FLAG": "ON",
-        "CMAKE_EXE_LINKER_FLAGS": "-fuse-ld=lld -pthread"
-      }
-    },
-    {
-      "name": "debug-office-wsl",
-      "inherits": "default",
-      "description": "Debug build",
-      "environment": {
-        "CAN_ACCESS_IN_PORT": "by $ENV{CAN_ACCESS_IN_PORT}",
-        "ASAN_OPTIONS": "allocator_may_return_null=1",
-        "CMAKE_BUILD_PARALLEL_LEVEL": "12",
-        "CMAKE_MAKE_PROGRAM": "colormake",
-        "VCPKG_DEFAULT_BINARY_CACHE": "$env{VCPKG_DIR}/vcpkg_binary_cache"
-      },
-      "cacheVariables": {
-        "CMAKE_BUILD_TYPE": "Debug",
-        "ENABLE_ASAN": "OFF",
-        "VCPKG_TARGET_TRIPLET": "x64-linux-dynamic-link-cpp20",
-        "CMAKE_TOOLCHAIN_FILE": "$env{VCPKG_DIR}/vcpkg/scripts/buildsystems/vcpkg.cmake",
-        "CMAKE_C_COMPILER_LAUNCHER": "ccache",
-        "CMAKE_CXX_COMPILER_LAUNCHER": "ccache",
-        "CMAKE_CUDA_COMPILER_LAUNCHER": "ccache",
-        "CMAKE_CXX_COMPILER": "/usr/bin/clang++",
-        "CMAKE_C_COMPILER": "/usr/bin/clang",
-        "THREADS_PREFER_PTHREAD_FLAG": "ON",
-        "CMAKE_EXE_LINKER_FLAGS": "-fuse-ld=lld -pthread"
-      }
-    },
-    {
       "name": "debug",
       "inherits": "default",
       "description": "Debug build t630",
-      "environment": {
-        "ASAN_OPTIONS": "allocator_may_return_null=1",
-        "CMAKE_BUILD_PARALLEL_LEVEL": "36",
-        "CMAKE_MAKE_PROGRAM": "colormake",
-        "VCPKG_DEFAULT_BINARY_CACHE": "/home/jianglibo/vcpkg-dir/vcpkg_binary_cache"
-      },
-      "cacheVariables": {
-        "CMAKE_BUILD_TYPE": "Debug",
-        "ENABLE_ASAN": "OFF",
-        "VCPKG_TARGET_TRIPLET": "x64-linux-cpp20",
-        "CMAKE_TOOLCHAIN_FILE": "/home/jianglibo/vcpkg-dir/vcpkg/scripts/buildsystems/vcpkg.cmake",
-        "CMAKE_C_COMPILER_LAUNCHER": "ccache",
-        "CMAKE_CXX_COMPILER_LAUNCHER": "ccache",
-        "CMAKE_CUDA_COMPILER_LAUNCHER": "ccache",
-        "CMAKE_CXX_COMPILER": "/usr/bin/clang++",
-        "CMAKE_C_COMPILER": "/usr/bin/clang",
-        "THREADS_PREFER_PTHREAD_FLAG": "ON",
-        "CMAKE_EXE_LINKER_FLAGS": "-fuse-ld=lld -pthread"
-      }
-    },
-    {
-      "name": "debug-dell-laptop-wsl",
-      "inherits": "default",
-      "description": "Debug build dell laptop",
       "environment": {
         "ASAN_OPTIONS": "allocator_may_return_null=1",
         "CMAKE_BUILD_PARALLEL_LEVEL": "36",
@@ -199,24 +63,6 @@
       }
     },
     {
-      "name": "mingw64",
-      "inherits": "default",
-      "description": "Compile for Windows using MinGW-w64",
-      "environment": {
-        "CUDAHOSTCXX": "D:/msys64/mingw64/bin/x86_64-w64-mingw32-g++.exe",
-        "CUDAFLAGS": "--allow-unsupported-compiler"
-      },
-      "cacheVariables": {
-        "CMAKE_BUILD_TYPE": "Debug",
-        "CMAKE_MAKE_PROGRAM": "$env{NINJA_BIN}",
-        "VCPKG_TARGET_TRIPLET": "x64-mingw-static-openexr-off",
-        "VCPKG_HOST_TRIPLET": "x64-mingw-static-openexr-off",
-        "VCPKG_DEFAULT_TRIPLET": "x64-mingw-static-openexr-off",
-        "VCPKG_DEFAULT_HOST_TRIPLET": "x64-mingw-static-openexr-off",
-        "CMAKE_TOOLCHAIN_FILE": "$env{VCPKG_DIR}/vcpkg/scripts/buildsystems/vcpkg.cmake"
-      }
-    },
-    {
       "name": "w64",
       "inherits": "default",
       "description": "Compile for Windows using Visual studio",
@@ -233,10 +79,6 @@
   ],
   "buildPresets": [
     {
-      "name": "docker-release",
-      "configurePreset": "docker-release"
-    },
-    {
       "name": "default",
       "hidden": true,
       "configurePreset": "default"
@@ -244,18 +86,6 @@
     {
       "name": "debug",
       "configurePreset": "debug"
-    },
-    {
-      "name": "release",
-      "configurePreset": "release"
-    },
-    {
-      "name": "debug",
-      "configurePreset": "debug"
-    },
-    {
-      "name": "mingw64",
-      "configurePreset": "mingw64"
     },
     {
       "name": "w64",
