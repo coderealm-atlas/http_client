@@ -66,8 +66,10 @@ struct ConfigSources {
     //             << paths_.size() << ", profiles: " << profiles.size());
     instance_count++;
     if (instance_count > 1) {
+#ifndef DEBUG_BUILD
       throw std::runtime_error(
           "ConfigSources should only be instantiated once.");
+#endif
     }
     if (paths_.empty()) {
       throw std::runtime_error(
@@ -110,6 +112,10 @@ struct ConfigSources {
         if (fs::exists(profile_app_json_path)) {
           ordered_app_json_paths.push_back(profile_app_json_path);
         }
+      }
+      fs::path override_path = path / "application.override.json";
+      if (fs::exists(override_path)) {
+        ordered_app_json_paths.push_back(override_path);
       }
     }
     // process ordered_app_json_paths
@@ -159,6 +165,10 @@ struct ConfigSources {
         if (fs::exists(full_path)) {
           ordered_paths.push_back(full_path);
         }
+      }
+      auto override_path = path / (filename + ".override.json");
+      if (fs::exists(override_path)) {
+        ordered_paths.push_back(override_path);
       }
     }
     // process ordered_paths, merge content instead of replacing
@@ -542,15 +552,16 @@ struct SessionAttributes {
   AuthBy auth_by = AuthBy::USERNAME_PASSWORD;
 
   // Auth context fields
-  // Authentication Methods References, e.g. ["pwd"], ["webauthn"], ["pwd","totp"]
+  // Authentication Methods References, e.g. ["pwd"], ["webauthn"],
+  // ["pwd","totp"]
   std::vector<std::string> amr;
   // Assurance level, e.g. "aal1", "aal2", "aal3"
   std::optional<std::string> acr;
   // Epoch seconds of primary authentication
   std::optional<int64_t> auth_time;
   // Optional flags
-  std::optional<bool> mfa;                 // whether MFA was used
-  std::optional<bool> webauthn_platform;   // true if platform authenticator
+  std::optional<bool> mfa;                   // whether MFA was used
+  std::optional<bool> webauthn_platform;     // true if platform authenticator
   std::optional<std::string> credential_id;  // last-used credential id (b64url)
   std::optional<bool> attestation_verified;  // if attestation was verified
 
