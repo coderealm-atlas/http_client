@@ -14,7 +14,6 @@
 #include <ostream>
 #include <vector>
 
-#include "common_macros.hpp"
 #include "result_monad.hpp"
 
 namespace fs = std::filesystem;
@@ -63,8 +62,8 @@ struct ConfigSources {
   ConfigSources(std::vector<fs::path> paths, std::vector<std::string> profiles)
       : paths_(std::move(paths)), profiles(std::move(profiles)) {
     // helper: deep merge two json values (objects only)
-    DEBUG_PRINT("initialize ConfigSources with paths_: "
-                << paths_.size() << ", profiles: " << profiles.size());
+    // DEBUG_PRINT("initialize ConfigSources with paths_: "
+    //             << paths_.size() << ", profiles: " << profiles.size());
     instance_count++;
     if (instance_count > 1) {
       throw std::runtime_error(
@@ -148,7 +147,7 @@ struct ConfigSources {
     // std::string content;
     std::vector<fs::path> ordered_paths;
     for (const auto& path : paths_) {
-      DEBUG_PRINT("checking: " << path / (filename + ".json"));
+      // DEBUG_PRINT("checking: " << path / (filename + ".json"));
       // check for {filename}.json
       if (fs::exists(path / (filename + ".json"))) {
         ordered_paths.push_back(path / (filename + ".json"));
@@ -156,7 +155,7 @@ struct ConfigSources {
       // check for {filename}.{profile}.json
       for (const auto& profile : profiles) {
         fs::path full_path = path / (filename + "." + profile + ".json");
-        DEBUG_PRINT("checking: " << full_path);
+        // DEBUG_PRINT("checking: " << full_path);
         if (fs::exists(full_path)) {
           ordered_paths.push_back(full_path);
         }
@@ -490,10 +489,10 @@ struct AppProperties {
               return monad::MyResult<void>::Ok();
             });
         if (r.is_err()) {
-          DEBUG_PRINT("Failed to parse envrc: {}" << path);
+          // DEBUG_PRINT("Failed to parse envrc: {}" << path);
           failed_files.push_back(path);
         } else {
-          DEBUG_PRINT("Successfully parsed envrc: {}" << path);
+          // DEBUG_PRINT("Successfully parsed envrc: {}" << path);
           processed_files.push_back(path);
         }
       }
