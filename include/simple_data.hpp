@@ -541,6 +541,19 @@ struct SessionAttributes {
   std::vector<Permission> user_permissions;
   AuthBy auth_by = AuthBy::USERNAME_PASSWORD;
 
+  // Auth context fields
+  // Authentication Methods References, e.g. ["pwd"], ["webauthn"], ["pwd","totp"]
+  std::vector<std::string> amr;
+  // Assurance level, e.g. "aal1", "aal2", "aal3"
+  std::optional<std::string> acr;
+  // Epoch seconds of primary authentication
+  std::optional<int64_t> auth_time;
+  // Optional flags
+  std::optional<bool> mfa;                 // whether MFA was used
+  std::optional<bool> webauthn_platform;   // true if platform authenticator
+  std::optional<std::string> credential_id;  // last-used credential id (b64url)
+  std::optional<bool> attestation_verified;  // if attestation was verified
+
   int64_t user_id_or_throw() {
     if (user_id) {
       return user_id.value();
@@ -593,6 +606,28 @@ struct SessionAttributes {
       jo["user_permissions"] = json::value_from(sa.user_permissions);
     }
     jo["auth_by"] = static_cast<int>(sa.auth_by);
+
+    if (!sa.amr.empty()) {
+      jo["amr"] = json::value_from(sa.amr);
+    }
+    if (sa.acr) {
+      jo["acr"] = *sa.acr;
+    }
+    if (sa.auth_time) {
+      jo["auth_time"] = *sa.auth_time;
+    }
+    if (sa.mfa) {
+      jo["mfa"] = *sa.mfa;
+    }
+    if (sa.webauthn_platform) {
+      jo["webauthn_platform"] = *sa.webauthn_platform;
+    }
+    if (sa.credential_id) {
+      jo["credential_id"] = *sa.credential_id;
+    }
+    if (sa.attestation_verified) {
+      jo["attestation_verified"] = *sa.attestation_verified;
+    }
     jv = std::move(jo);
   }
 
@@ -621,6 +656,27 @@ struct SessionAttributes {
       if (auto* user_permissions_p = jo_p->if_contains("user_permissions")) {
         sa.user_permissions =
             json::value_to<std::vector<Permission>>(*user_permissions_p);
+      }
+      if (auto* amr_p = jo_p->if_contains("amr")) {
+        sa.amr = json::value_to<std::vector<std::string>>(*amr_p);
+      }
+      if (auto* acr_p = jo_p->if_contains("acr")) {
+        sa.acr.emplace(acr_p->as_string());
+      }
+      if (auto* auth_time_p = jo_p->if_contains("auth_time")) {
+        sa.auth_time.emplace(auth_time_p->to_number<int64_t>());
+      }
+      if (auto* mfa_p = jo_p->if_contains("mfa")) {
+        sa.mfa.emplace(mfa_p->as_bool());
+      }
+      if (auto* platform_p = jo_p->if_contains("webauthn_platform")) {
+        sa.webauthn_platform.emplace(platform_p->as_bool());
+      }
+      if (auto* cred_id_p = jo_p->if_contains("credential_id")) {
+        sa.credential_id.emplace(cred_id_p->as_string());
+      }
+      if (auto* attest_p = jo_p->if_contains("attestation_verified")) {
+        sa.attestation_verified.emplace(attest_p->as_bool());
       }
     }
     return sa;
