@@ -297,37 +297,6 @@ void pretty_print(std::ostream& os, json::value const& jv,
   if (indent->empty()) os << "\n";
 }
 
-uint64_t uint64_from_json_ob(const json::value& jv, const std::string& key) {
-  const json::value* jv_p =
-      key.empty()
-          ? &jv
-          : (jv.is_object()
-                 ? (jv.as_object().contains(key) ? &jv.at(key) : nullptr)
-                 : nullptr);
-
-  if (jv_p) {
-    if (jv_p->is_number()) {
-      return jv_p->to_number<uint64_t>();
-    } else if (auto* id_v_p = jv_p->if_string()) {
-      if (id_v_p->empty()) {
-        return 0;
-      }
-      uint64_t id = 0;
-      auto [ptr, ec] =
-          std::from_chars(id_v_p->data(), id_v_p->data() + id_v_p->size(), id);
-      if (ec != std::errc{} || ptr != id_v_p->data() + id_v_p->size()) {
-        std::cerr << "I can't convert it to an uint64: " << *jv_p << std::endl;
-        return 0;
-      }
-      return id;
-    } else {
-      std::cerr << "I can't convert it to an uint64: " << *jv_p << std::endl;
-      return 0;
-    }
-  } else {
-    return 0;
-  }
-}
 
 bool bool_from_json_ob(const json::value& jv, const std::string& key) {
   const json::value* jv_p =
@@ -419,47 +388,4 @@ std::string prettyPrint(const boost::json::value& val, int level) {
       return "";  // Should not happen
   }
 }
-
-bool could_be_uint64(const json::value& jv, uint64_t& out_value) {
-  if (jv.is_uint64()) {
-    out_value = jv.to_number<uint64_t>();
-    return true;
-  } else if (jv.is_int64()) {
-    auto v = jv.to_number<int64_t>();
-    if (v >= 0) {
-      out_value = static_cast<uint64_t>(v);
-      return true;
-    }
-  } else if (jv.is_double()) {
-    double v = jv.to_number<double>();
-    if (v >= 0 && v == std::floor(v) && v <= static_cast<double>(UINT64_MAX)) {
-      out_value = static_cast<uint64_t>(v);
-      return true;
-    }
-  }
-  return false;
-}
-
-MyResult<uint64_t> to_uint64(const json::value& jv) {
-  if (jv.is_uint64()) {
-    return MyResult<uint64_t>::Ok(jv.to_number<uint64_t>());
-  } else if (jv.is_int64()) {
-    auto v = jv.to_number<int64_t>();
-    if (v >= 0) {
-      return MyResult<uint64_t>::Ok(static_cast<uint64_t>(v));
-    } else {
-      return MyResult<uint64_t>::Err({.code = 1, .what = "less than 0."});
-    }
-  } else if (jv.is_double()) {
-    double v = jv.to_number<double>();
-    if (v >= 0 && v == std::floor(v) && v <= static_cast<double>(UINT64_MAX)) {
-      return MyResult<uint64_t>::Ok(static_cast<uint64_t>(v));
-    } else {
-      return MyResult<uint64_t>::Err({.code = 1, .what = "out of range."});
-    }
-  } else {
-    return MyResult<uint64_t>::Err({.code = 1, .what = "not a number."});
-  }
-}
-
 }  // namespace jsonutil
