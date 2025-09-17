@@ -467,6 +467,79 @@ TEST(DelayTest, retry_if_1) {
   EXPECT_TRUE(called);
 }
 
+TEST(PollIfTest, ValueSatisfiedEventually) {
+  boost::asio::io_context ioc;
+  int counter = 0;
+  auto io = IO<int>([&counter](IO<int>::Callback cb) {
+              cb(IO<int>::IOResult::Ok(counter++));
+            })
+                .poll_if(5, std::chrono::milliseconds(10), ioc,
+                         [](const int& v) { return v >= 3; });
+
+  bool called = false;
+  io.run([&](IO<int>::IOResult r) {
+    ASSERT_TRUE(r.is_ok());
+    EXPECT_GE(r.value(), 3);
+    called = true;
+  });
+  ioc.run();
+  EXPECT_TRUE(called);
+}
+
+TEST(PollIfTest, AttemptsExhausted) {
+  boost::asio::io_context ioc;
+  auto io = IO<int>::pure(1).poll_if(3, std::chrono::milliseconds(5), ioc,
+                                     [](const int& v) { return v > 10; });
+  bool called = false;
+  io.run([&](IO<int>::IOResult r) {
+    ASSERT_TRUE(r.is_err());
+    EXPECT_EQ(r.error().code, 3);
+    called = true;
+  });
+  ioc.run();
+  EXPECT_TRUE(called);
+}
+
+TEST(PollIfTest, ErrorThenSuccessWithRetryPredicate) {
+  boost::asio::io_context ioc;
+  int attempt = 0;
+  auto io = IO<int>([&attempt](IO<int>::Callback cb) {
+              if (attempt++ == 0) {
+                cb(IO<int>::IOResult::Err(Error{9, "first attempt fails"}));
+              } else {
+                cb(IO<int>::IOResult::Ok(42));
+              }
+            })
+                .poll_if(3, std::chrono::milliseconds(5), ioc,
+                         [](const int& v) { return v == 42; },
+                         [](const Error& e) { return e.code == 9; });
+  bool called = false;
+  io.run([&](IO<int>::IOResult r) {
+    ASSERT_TRUE(r.is_ok());
+    EXPECT_EQ(r.value(), 42);
+    called = true;
+  });
+  ioc.run();
+  EXPECT_TRUE(called);
+}
+
+TEST(PollIfVoidTest, SatisfiedAfterActions) {
+  boost::asio::io_context ioc;
+  int counter = 0;
+  auto action = IO<void>::pure().map([&counter]() { counter++; });
+  auto polled = std::move(action).poll_if(
+      5, std::chrono::milliseconds(5), ioc, [&counter]() { return counter >= 2; });
+
+  bool called = false;
+  polled.run([&](IO<void>::IOResult r) {
+    ASSERT_TRUE(r.is_ok());
+    called = true;
+  });
+  ioc.run();
+  EXPECT_TRUE(called);
+  EXPECT_GE(counter, 2);
+}
+
 TEST(IOTest, NonCopyableThunkFailsToClone) {
   struct NonCopyable {
     NonCopyable() = default;

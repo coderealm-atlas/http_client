@@ -291,6 +291,80 @@ class IO {
         max_attempts, initial_delay, ioc, [](const Error&) { return true; });
   }
 
+  // Poll until condition on value is satisfied or attempts exhausted.
+  // - max_attempts: maximum number of executions (>=1)
+  // - interval: delay between attempts when not satisfied or retrying on error
+  // - ioc: io_context for timers
+  // - satisfied: predicate to decide if we can stop successfully
+  // - retry_on_error: if returns true, keep retrying on error; otherwise fail immediately
+  IO<T> poll_if(int max_attempts, std::chrono::milliseconds interval,
+                boost::asio::io_context& ioc,
+                std::function<bool(const T&)> satisfied,
+                std::function<bool(const Error&)> retry_on_error =
+                    [](const Error&) { return true; }) && {
+    return IO<T>([max_attempts, interval, ioc_ptr = &ioc,
+                  satisfied = std::move(satisfied),
+                  retry_on_error = std::move(retry_on_error),
+                  self_ptr = std::make_shared<IO<T>>(std::move(*this))](
+                     auto cb) mutable {
+      auto attempt = std::make_shared<int>(0);
+      auto do_attempt = std::make_shared<std::function<void()>>();
+
+      *do_attempt = [=]() mutable {
+        if (*attempt >= max_attempts) {
+          cb(Result<T, Error>::Err(Error{3, "Polling attempts exhausted"}));
+          return;
+        }
+        (*attempt)++;
+        self_ptr->clone().run([=](IOResult r) mutable {
+          if (r.is_ok()) {
+            const T& v = r.value();
+            if (satisfied(v)) {
+              cb(std::move(r));
+            } else {
+              auto timer = std::make_shared<boost::asio::steady_timer>(*ioc_ptr);
+              timer->expires_after(interval);
+              timer->async_wait([=, timer = timer](const boost::system::error_code& ec) mutable {
+                if (ec) {
+                  cb(Result<T, Error>::Err(
+                      Error{1, std::string{"Timer error: "} + ec.message()}));
+                } else {
+                  (*do_attempt)();
+                }
+              });
+            }
+          } else {
+            if (!retry_on_error(r.error()) || *attempt >= max_attempts) {
+              cb(std::move(r));
+            } else {
+              auto timer = std::make_shared<boost::asio::steady_timer>(*ioc_ptr);
+              timer->expires_after(interval);
+              timer->async_wait([=, timer = timer](const boost::system::error_code& ec) mutable {
+                if (ec) {
+                  cb(Result<T, Error>::Err(
+                      Error{1, std::string{"Timer error: "} + ec.message()}));
+                } else {
+                  (*do_attempt)();
+                }
+              });
+            }
+          }
+        });
+      };
+
+      (*do_attempt)();
+    });
+  }
+  IO<T> poll_if(int max_attempts, std::chrono::milliseconds interval,
+                boost::asio::io_context& ioc,
+                std::function<bool(const T&)> satisfied,
+                std::function<bool(const Error&)> retry_on_error =
+                    [](const Error&) { return true; }) & {
+    return std::move(*this).poll_if(max_attempts, interval, ioc,
+                                    std::move(satisfied),
+                                    std::move(retry_on_error));
+  }
+
   void run(Callback cb) const { thunk_(std::move(cb)); }
 
  private:
@@ -515,6 +589,67 @@ class IO<void> {
                              boost::asio::io_context& ioc) && {
     return std::move(*this).retry_exponential_if(
         max_attempts, initial_delay, ioc, [](const Error&) { return true; });
+  }
+
+  // Poll IO<void> until external condition is satisfied. After each run, call
+  // satisfied(); if false, wait interval and retry. Errors are retried if
+  // retry_on_error returns true and attempts remain.
+  IO<void> poll_if(int max_attempts, std::chrono::milliseconds interval,
+                   boost::asio::io_context& ioc,
+                   std::function<bool()> satisfied,
+                   std::function<bool(const Error&)> retry_on_error =
+                       [](const Error&) { return true; }) && {
+    return IO<void>([max_attempts, interval, ioc_ptr = &ioc,
+                     satisfied = std::move(satisfied),
+                     retry_on_error = std::move(retry_on_error),
+                     self_ptr = std::make_shared<IO<void>>(std::move(*this))](
+                        auto cb) mutable {
+      auto attempt = std::make_shared<int>(0);
+      auto do_attempt = std::make_shared<std::function<void()>>();
+
+      *do_attempt = [=]() mutable {
+        if (*attempt >= max_attempts) {
+          cb(Result<void, Error>::Err(Error{3, "Polling attempts exhausted"}));
+          return;
+        }
+        (*attempt)++;
+        self_ptr->clone().run([=](IOResult r) mutable {
+          if (r.is_ok()) {
+            if (satisfied()) {
+              cb(Result<void, Error>::Ok());
+            } else {
+              auto timer = std::make_shared<boost::asio::steady_timer>(*ioc_ptr);
+              timer->expires_after(interval);
+              timer->async_wait([=, timer = timer](const boost::system::error_code& ec) mutable {
+                if (ec) {
+                  cb(Result<void, Error>::Err(
+                      Error{1, std::string{"Timer error: "} + ec.message()}));
+                } else {
+                  (*do_attempt)();
+                }
+              });
+            }
+          } else {
+            if (!retry_on_error(r.error()) || *attempt >= max_attempts) {
+              cb(std::move(r));
+            } else {
+              auto timer = std::make_shared<boost::asio::steady_timer>(*ioc_ptr);
+              timer->expires_after(interval);
+              timer->async_wait([=, timer = timer](const boost::system::error_code& ec) mutable {
+                if (ec) {
+                  cb(Result<void, Error>::Err(
+                      Error{1, std::string{"Timer error: "} + ec.message()}));
+                } else {
+                  (*do_attempt)();
+                }
+              });
+            }
+          }
+        });
+      };
+
+      (*do_attempt)();
+    });
   }
 
   IO<void> delay(boost::asio::io_context& ioc,

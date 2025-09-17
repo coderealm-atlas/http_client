@@ -19,13 +19,8 @@ target_link_libraries(
         OpenSSL::Crypto
     )
 add_test(
-    NAME ${T_NAME}.merge
-    COMMAND ${T_NAME} --gtest_filter=ConfigSourcesTest.JsonOverrideMergingWorks
-    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
-
-add_test(
-    NAME ${T_NAME}.missing
-    COMMAND ${T_NAME} --gtest_filter=ConfigSourcesTest.MissingJsonReturnsError
+    NAME ${T_NAME}
+    COMMAND ${T_NAME}
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 
 # ----------------------------config_sources_test.cpp------------------------------
@@ -47,13 +42,20 @@ target_link_libraries(
 )
 
 add_test(
-    NAME ${T_NAME}
-    COMMAND ${T_NAME}
-    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+        NAME ${T_NAME}.merge
+        COMMAND ${T_NAME} --gtest_filter=ConfigSourcesTest.JsonOverrideMergingWorks
+        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+
+add_test(
+        NAME ${T_NAME}.missing
+        COMMAND ${T_NAME} --gtest_filter=ConfigSourcesTest.MissingJsonReturnsError
+        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 # Mark as network-dependent and optionally disable via env flag
-set_tests_properties(${T_NAME} PROPERTIES LABELS "network")
+set_tests_properties(${T_NAME}.merge PROPERTIES LABELS "network")
+set_tests_properties(${T_NAME}.missing PROPERTIES LABELS "network")
 if("$ENV{HTTPCLIENT_SKIP_NETWORK_TESTS}" STREQUAL "1")
-  set_tests_properties(${T_NAME} PROPERTIES DISABLED TRUE)
+    set_tests_properties(${T_NAME}.merge PROPERTIES DISABLED TRUE)
+    set_tests_properties(${T_NAME}.missing PROPERTIES DISABLED TRUE)
 endif()
 #
 # unit tests:
