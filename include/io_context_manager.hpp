@@ -10,7 +10,14 @@ namespace asio = boost::asio;
 
 namespace cjj365 {
 
-class IoContextManager {
+class IIoContextManager {
+ public:
+  virtual asio::io_context& ioc() = 0;
+  virtual void stop() = 0;
+  virtual ~IIoContextManager() = default;
+};
+
+class IoContextManager : public IIoContextManager {
   int threads_num_;
   std::string name_;
   std::vector<std::thread> threads_;
