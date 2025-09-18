@@ -18,6 +18,7 @@ class IoContextManager {
   asio::executor_work_guard<asio::io_context::executor_type> work_guard;
   std::atomic<bool> stopped_{false};
   customio::IOutput& output_;
+  std::atomic<int> instance_count_{0};
 
  public:
   IoContextManager(cjj365::IIocConfigProvider& ioc_config_provider,
@@ -27,6 +28,10 @@ class IoContextManager {
         output_(output),
         name_(ioc_config_provider.get().get_name()),
         work_guard(asio::make_work_guard(ioc_)) {
+    if (instance_count_.fetch_add(1) > 0) {
+      throw std::runtime_error(
+          "Only one instance of IoContextManager is allowed.");
+    }
     threads_.reserve(threads_num_);
     for (int i = 0; i < threads_num_; ++i) {
       threads_.emplace_back([this, i] {
