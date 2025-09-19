@@ -39,6 +39,7 @@ class IoContextManager : public IIoContextManager {
       throw std::runtime_error(
           "Only one instance of IoContextManager is allowed.");
     }
+    output_.info() << "[IoContextManager] constructing name=" << name_ << " threads_num=" << threads_num_ << std::endl;
     threads_.reserve(threads_num_);
     for (int i = 0; i < threads_num_; ++i) {
       threads_.emplace_back([this, i] {
@@ -49,6 +50,7 @@ class IoContextManager : public IIoContextManager {
           output_.error() << "io_context run exception: " << e.what();
         }
       });
+      output_.debug() << "[IoContextManager] started worker thread index=" << i << std::endl;
     }
   }
 
