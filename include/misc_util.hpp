@@ -19,6 +19,8 @@
 #include <utility>
 #include <variant>
 
+#include "common_macros.hpp"  // ensure DEBUG_PRINT macro available
+
 namespace fs = std::filesystem;
 
 namespace misc {

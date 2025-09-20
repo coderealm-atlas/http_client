@@ -549,6 +549,7 @@ struct SessionAttributes {
   std::optional<int64_t> user_quota_id;
   std::vector<std::string> user_roles;
   std::vector<Permission> user_permissions;
+  std::optional<std::string> country_of_residence;
   AuthBy auth_by = AuthBy::USERNAME_PASSWORD;
 
   // Auth context fields
@@ -638,6 +639,9 @@ struct SessionAttributes {
     }
     if (sa.attestation_verified) {
       jo["attestation_verified"] = *sa.attestation_verified;
+    }
+    if (sa.country_of_residence) {
+      jo["country_of_residence"] = *sa.country_of_residence;
     }
     jv = std::move(jo);
   }
