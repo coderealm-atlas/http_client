@@ -23,6 +23,7 @@ class HttpClientManager {
       boost::asio::executor_work_guard<boost::asio::io_context::executor_type>>
       work_guard;
   std::unique_ptr<beast_pool::ConnectionPool> pool_;
+  std::atomic<bool> stopped_{false};
 
  public:
   HttpClientManager(cjj365::ClientSSLContext& ctx,
@@ -40,7 +41,10 @@ class HttpClientManager {
     }
   }
 
+  ~HttpClientManager() { stop(); }
+
   void stop() {
+    if (stopped_.exchange(true)) return;  // already stopped
     work_guard->reset();
     ioc->stop();
     for (auto& t : thread_pool) {

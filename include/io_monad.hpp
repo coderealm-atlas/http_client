@@ -205,6 +205,35 @@ class IO {
     return std::move(*this).timeout(ioc, duration);
   }
 
+  // Executor-aware timeout
+  IO<T> timeout(boost::asio::any_io_executor ex,
+                std::chrono::milliseconds duration) && {
+    return IO<T>([ex, duration, self = std::move(*this)](auto cb) mutable {
+      auto timer = std::make_shared<boost::asio::steady_timer>(ex);
+      auto fired = std::make_shared<bool>(false);
+
+      timer->expires_after(duration);
+      timer->async_wait(
+          [cb, fired](const boost::system::error_code& ec) mutable {
+            if (*fired) return;
+            *fired = true;
+            if (!ec)
+              cb(Result<T, Error>::Err(Error{2, "Operation timed out"}));
+          });
+
+      self.run([cb, timer, fired](IOResult r) mutable {
+        if (*fired) return;
+        *fired = true;
+        detail::cancel_timer(*timer);
+        cb(std::move(r));
+      });
+    });
+  }
+  IO<T> timeout(boost::asio::any_io_executor ex,
+                std::chrono::milliseconds duration) & {
+    return std::move(*this).timeout(ex, duration);
+  }
+
   IO<T> delay(boost::asio::io_context& ioc,
               std::chrono::milliseconds duration) && {
     return IO<T>([ioc_ptr = &ioc, duration,
@@ -244,6 +273,47 @@ class IO {
   IO<T> delay(boost::asio::io_context& ioc,
               std::chrono::milliseconds duration) & {
     return std::move(*this).delay(ioc, duration);
+  }
+
+  // Executor-aware delay
+  IO<T> delay(boost::asio::any_io_executor ex,
+              std::chrono::milliseconds duration) && {
+    return IO<T>([ex, duration, self = std::move(*this)](auto cb) mutable {
+      auto timer = std::make_shared<boost::asio::steady_timer>(ex);
+      auto result = std::make_shared<std::optional<IOResult>>();
+      auto delivered = std::make_shared<bool>(false);
+      auto timer_fired = std::make_shared<bool>(false);
+
+      timer->expires_after(duration);
+      timer->async_wait([cb, result, delivered, timer_fired,
+                         timer](const boost::system::error_code& ec) mutable {
+        if (*delivered) return;
+        if (ec) {
+          *delivered = true;
+          cb(Result<T, Error>::Err(
+              Error{1, std::string{"Timer error: "} + ec.message()}));
+          return;
+        }
+        *timer_fired = true;
+        if (result->has_value()) {
+          *delivered = true;
+          cb(std::move(**result));
+        }
+      });
+
+      self.run([cb, result, delivered, timer_fired, timer](IOResult r) mutable {
+        if (*delivered) return;
+        *result = std::move(r);
+        if (*timer_fired) {
+          *delivered = true;
+          cb(std::move(**result));
+        }
+      });
+    });
+  }
+  IO<T> delay(boost::asio::any_io_executor ex,
+              std::chrono::milliseconds duration) & {
+    return std::move(*this).delay(ex, duration);
   }
 
   IO<T> retry_exponential_if(
@@ -361,6 +431,75 @@ class IO {
                 std::function<bool(const Error&)> retry_on_error =
                     [](const Error&) { return true; }) & {
     return std::move(*this).poll_if(max_attempts, interval, ioc,
+                                    std::move(satisfied),
+                                    std::move(retry_on_error));
+  }
+
+  // Executor-aware poll_if for IO<T>
+  IO<T> poll_if(int max_attempts, std::chrono::milliseconds interval,
+                boost::asio::any_io_executor ex,
+                std::function<bool(const T&)> satisfied,
+                std::function<bool(const Error&)> retry_on_error =
+                    [](const Error&) { return true; }) && {
+    return IO<T>([max_attempts, interval, ex,
+                  satisfied = std::move(satisfied),
+                  retry_on_error = std::move(retry_on_error),
+                  self_ptr = std::make_shared<IO<T>>(std::move(*this))](
+                     auto cb) mutable {
+      auto attempt = std::make_shared<int>(0);
+      auto do_attempt = std::make_shared<std::function<void()>>();
+
+      *do_attempt = [=]() mutable {
+        if (*attempt >= max_attempts) {
+          cb(Result<T, Error>::Err(Error{3, "Polling attempts exhausted"}));
+          return;
+        }
+        (*attempt)++;
+        self_ptr->clone().run([=](IOResult r) mutable {
+          if (r.is_ok()) {
+            const T& v = r.value();
+            if (satisfied(v)) {
+              cb(std::move(r));
+            } else {
+              auto timer = std::make_shared<boost::asio::steady_timer>(ex);
+              timer->expires_after(interval);
+              timer->async_wait([=, timer = timer](const boost::system::error_code& ec) mutable {
+                if (ec) {
+                  cb(Result<T, Error>::Err(
+                      Error{1, std::string{"Timer error: "} + ec.message()}));
+                } else {
+                  (*do_attempt)();
+                }
+              });
+            }
+          } else {
+            if (!retry_on_error(r.error()) || *attempt >= max_attempts) {
+              cb(std::move(r));
+            } else {
+              auto timer = std::make_shared<boost::asio::steady_timer>(ex);
+              timer->expires_after(interval);
+              timer->async_wait([=, timer = timer](const boost::system::error_code& ec) mutable {
+                if (ec) {
+                  cb(Result<T, Error>::Err(
+                      Error{1, std::string{"Timer error: "} + ec.message()}));
+                } else {
+                  (*do_attempt)();
+                }
+              });
+            }
+          }
+        });
+      };
+
+      (*do_attempt)();
+    });
+  }
+  IO<T> poll_if(int max_attempts, std::chrono::milliseconds interval,
+                boost::asio::any_io_executor ex,
+                std::function<bool(const T&)> satisfied,
+                std::function<bool(const Error&)> retry_on_error =
+                    [](const Error&) { return true; }) & {
+    return std::move(*this).poll_if(max_attempts, interval, ex,
                                     std::move(satisfied),
                                     std::move(retry_on_error));
   }
@@ -546,6 +685,35 @@ class IO<void> {
         });
   }
 
+  // Executor-aware timeout
+  IO<void> timeout(boost::asio::any_io_executor ex,
+                   std::chrono::milliseconds duration) && {
+    return IO<void>([ex, duration, self = std::move(*this)](auto cb) mutable {
+      auto timer = std::make_shared<boost::asio::steady_timer>(ex);
+      auto fired = std::make_shared<bool>(false);
+
+      timer->expires_after(duration);
+      timer->async_wait(
+          [cb, fired](const boost::system::error_code& ec) mutable {
+            if (*fired) return;
+            *fired = true;
+            if (!ec) cb(IOResult::Err(Error{2, "Operation timed out"}));
+          });
+
+      self.run([cb, timer, fired](IOResult r) mutable {
+        if (*fired) return;
+        *fired = true;
+        detail::cancel_timer(*timer);
+        cb(std::move(r));
+      });
+    });
+  }
+
+  IO<void> timeout(boost::asio::any_io_executor ex,
+                   std::chrono::milliseconds duration) & {
+    return std::move(*this).timeout(ex, duration);
+  }
+
   IO<void> retry_exponential_if(
       int max_attempts, std::chrono::milliseconds initial_delay,
       boost::asio::io_context& ioc,
@@ -652,6 +820,75 @@ class IO<void> {
     });
   }
 
+  // Executor-aware poll_if for IO<void>
+  IO<void> poll_if(int max_attempts, std::chrono::milliseconds interval,
+                   boost::asio::any_io_executor ex,
+                   std::function<bool()> satisfied,
+                   std::function<bool(const Error&)> retry_on_error =
+                       [](const Error&) { return true; }) && {
+    return IO<void>([max_attempts, interval, ex,
+                     satisfied = std::move(satisfied),
+                     retry_on_error = std::move(retry_on_error),
+                     self_ptr = std::make_shared<IO<void>>(std::move(*this))](
+                        auto cb) mutable {
+      auto attempt = std::make_shared<int>(0);
+      auto do_attempt = std::make_shared<std::function<void()>>();
+
+      *do_attempt = [=]() mutable {
+        if (*attempt >= max_attempts) {
+          cb(Result<void, Error>::Err(Error{3, "Polling attempts exhausted"}));
+          return;
+        }
+        (*attempt)++;
+        self_ptr->clone().run([=](IOResult r) mutable {
+          if (r.is_ok()) {
+            if (satisfied()) {
+              cb(Result<void, Error>::Ok());
+            } else {
+              auto timer = std::make_shared<boost::asio::steady_timer>(ex);
+              timer->expires_after(interval);
+              timer->async_wait([=, timer = timer](const boost::system::error_code& ec) mutable {
+                if (ec) {
+                  cb(Result<void, Error>::Err(
+                      Error{1, std::string{"Timer error: "} + ec.message()}));
+                } else {
+                  (*do_attempt)();
+                }
+              });
+            }
+          } else {
+            if (!retry_on_error(r.error()) || *attempt >= max_attempts) {
+              cb(std::move(r));
+            } else {
+              auto timer = std::make_shared<boost::asio::steady_timer>(ex);
+              timer->expires_after(interval);
+              timer->async_wait([=, timer = timer](const boost::system::error_code& ec) mutable {
+                if (ec) {
+                  cb(Result<void, Error>::Err(
+                      Error{1, std::string{"Timer error: "} + ec.message()}));
+                } else {
+                  (*do_attempt)();
+                }
+              });
+            }
+          }
+        });
+      };
+
+      (*do_attempt)();
+    });
+  }
+
+  IO<void> poll_if(int max_attempts, std::chrono::milliseconds interval,
+                   boost::asio::any_io_executor ex,
+                   std::function<bool()> satisfied,
+                   std::function<bool(const Error&)> retry_on_error =
+                       [](const Error&) { return true; }) & {
+    return std::move(*this).poll_if(max_attempts, interval, ex,
+                                    std::move(satisfied),
+                                    std::move(retry_on_error));
+  }
+
   IO<void> delay(boost::asio::io_context& ioc,
                  std::chrono::milliseconds duration) && {
     return IO<void>([ioc_ptr = &ioc, duration,
@@ -687,6 +924,48 @@ class IO<void> {
         }
       });
     });
+  }
+
+  // Executor-aware delay
+  IO<void> delay(boost::asio::any_io_executor ex,
+                 std::chrono::milliseconds duration) && {
+    return IO<void>([ex, duration, self = std::move(*this)](auto cb) mutable {
+      auto timer = std::make_shared<boost::asio::steady_timer>(ex);
+      auto result = std::make_shared<std::optional<IOResult>>();
+      auto delivered = std::make_shared<bool>(false);
+      auto timer_fired = std::make_shared<bool>(false);
+
+      timer->expires_after(duration);
+      timer->async_wait([cb, result, delivered, timer_fired,
+                         timer](const boost::system::error_code& ec) mutable {
+        if (*delivered) return;
+        if (ec) {
+          *delivered = true;
+          cb(Result<void, Error>::Err(
+              Error{1, std::string{"Timer error: "} + ec.message()}));
+          return;
+        }
+        *timer_fired = true;
+        if (result->has_value()) {
+          *delivered = true;
+          cb(std::move(**result));
+        }
+      });
+
+      self.run([cb, result, delivered, timer_fired, timer](IOResult r) mutable {
+        if (*delivered) return;
+        *result = std::move(r);
+        if (*timer_fired) {
+          *delivered = true;
+          cb(std::move(**result));
+        }
+      });
+    });
+  }
+
+  IO<void> delay(boost::asio::any_io_executor ex,
+                 std::chrono::milliseconds duration) & {
+    return std::move(*this).delay(ex, duration);
   }
 
   void run(Callback cb) const { thunk_(std::move(cb)); }
