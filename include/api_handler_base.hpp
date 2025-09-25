@@ -18,44 +18,44 @@ namespace fs = std::filesystem;
 namespace apihandler {
 
 template <typename T>
-struct ApiResponse {
+struct ApiDataResponse {
   std::variant<std::monostate, T, std::vector<T>> data = std::monostate{};
   std::optional<resp::DataMeta> meta;
   std::string content_type = "application/json";
 
   // Default constructor
-  ApiResponse() = default;
+  ApiDataResponse() = default;
 
   // Constructors
   template <typename U = T>
   requires(!std::same_as<U, std::vector<T>> &&
            !std::same_as<U, resp::ListResult<T>>)
-  ApiResponse(T&& val, const std::string& content_type = "application/json")
+  ApiDataResponse(T&& val, const std::string& content_type = "application/json")
       : data(std::move(val)), content_type(content_type) {}
   // Deleted constructor for lvalue reference to prevent copy
-  ApiResponse(const T& val,
+  ApiDataResponse(const T& val,
               const std::string& content_type = "application/json") = delete;
 
-  ApiResponse(std::vector<T>&& vec,
+  ApiDataResponse(std::vector<T>&& vec,
               const std::string& content_type = "application/json")
       : data(std::move(vec)),
         meta(resp::DataMeta{static_cast<int64_t>(vec.size()), 0, vec.size()}),
         content_type(content_type) {}
   // Deleted constructor for lvalue reference to vector
-  ApiResponse(const std::vector<T>&,
+  ApiDataResponse(const std::vector<T>&,
               const std::string& content_type = "application/json") = delete;
 
-  ApiResponse(resp::ListResult<T>&& result)
+  ApiDataResponse(resp::ListResult<T>&& result)
       : data(std::move(result.data)),
         meta(std::move(result.meta)),
         content_type("application/json") {}
 
-  ApiResponse(const resp::ListResult<T>&,
+  ApiDataResponse(const resp::ListResult<T>&,
               const std::string& content_type = "application/json") = delete;
 
   // JSON serialization
   friend void tag_invoke(const json::value_from_tag&, json::value& jv,
-                         const ApiResponse<T>& resp) {
+                         const ApiDataResponse<T>& resp) {
     json::object jo;
 
     if (std::holds_alternative<T>(resp.data)) {
@@ -77,9 +77,9 @@ struct ApiResponse {
   bool is_list() const { return std::holds_alternative<std::vector<T>>(data); }
   bool is_empty() const { return std::holds_alternative<std::monostate>(data); }
 
-  friend ApiResponse<T> tag_invoke(const json::value_to_tag<ApiResponse<T>>&,
+  friend ApiDataResponse<T> tag_invoke(const json::value_to_tag<ApiDataResponse<T>>&,
                                    const json::value& jv) {
-    ApiResponse<T> resp{};  // default-constructed, data is monostate
+    ApiDataResponse<T> resp{};  // default-constructed, data is monostate
     if (auto* jo = jv.if_object()) {
       if (auto* data_p = jo->if_contains("data")) {
         if (auto* data_array_p = data_p->if_array()) {
@@ -152,7 +152,7 @@ auto make_io_response(Resp&& r) {
 struct ResponseGenerator {
   // ApiResponse<T> → http::string_body
   template <typename T>
-  auto operator()(ApiResponse<T>&& resp,
+  auto operator()(ApiDataResponse<T>&& resp,
                   http::status status = http::status::ok) const {
     http::response<http::string_body> res;
     res.version(11);
