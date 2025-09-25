@@ -64,7 +64,8 @@ class IocConfigProviderFile : public IIocConfigProvider {
       config_ = IocConfig(cores, "main");
     } else {
       json::value jv = r.value();
-      jsonutil::substitue_envs(jv, app_properties.properties);
+      jsonutil::substitue_envs(jv, config_sources.cli_overrides(),
+                               app_properties.properties);
       config_ = json::value_to<IocConfig>(std::move(jv));
     }
   }

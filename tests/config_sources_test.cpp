@@ -3,6 +3,7 @@
 #include <boost/json.hpp>
 #include <filesystem>
 #include <fstream>
+#include <map>
 #include <string>
 #include <unistd.h>
 
@@ -117,6 +118,27 @@ TEST(ConfigSourcesTest, MissingJsonReturnsError) {
   auto res = sources.json_content("nonexistent");
   ASSERT_TRUE(res.is_err());
   EXPECT_EQ(res.error().code, 5019);
+  std::error_code ec;
+  fs::remove_all(root, ec);
+}
+
+TEST(ConfigSourcesTest, CliOverridesPropagateToAppProperties) {
+  fs::path root = make_temp_dir("configsources_cli");
+  write_file(root / "application.properties", "API_URL=file-value\n");
+
+  std::map<std::string, std::string> cli{{"API_URL", "cli-value"},
+                                         {"OTHER", "cli-only"}};
+  cjj365::ConfigSources sources({root}, {}, cli);
+  cjj365::AppProperties props{sources};
+
+  auto it = props.properties.find("API_URL");
+  ASSERT_NE(it, props.properties.end());
+  EXPECT_EQ(it->second, "cli-value");
+
+  auto it_other = props.properties.find("OTHER");
+  ASSERT_NE(it_other, props.properties.end());
+  EXPECT_EQ(it_other->second, "cli-only");
+
   std::error_code ec;
   fs::remove_all(root, ec);
 }

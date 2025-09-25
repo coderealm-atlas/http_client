@@ -149,8 +149,9 @@ monad::MyVoidResult expect_true_at(const json::value& val,
 // Helper function to replace ${VARIABLE} or ${VARIABLE:-default} with the
 // environment variable
 std::string replace_env_var(
-    const std::string& input,
-    const std::map<std::string, std::string>& extra_map) {
+  const std::string& input,
+  const std::map<std::string, std::string>& cli_map,
+  const std::map<std::string, std::string>& properties_map) {
   std::string output = input;
   size_t pos = 0;
   while (true) {
@@ -174,16 +175,18 @@ std::string replace_env_var(
     // char>(var.front()))) var.erase(var.begin()); while (!var.empty() &&
     // isspace(static_cast<unsigned char>(var.back()))) var.pop_back();
 
-    const char* env_value = std::getenv(var.c_str());
     std::string replacement;
-    if (env_value && *env_value) {
-      replacement = env_value;  // 1. environment wins
-    } else if (auto it = extra_map.find(var); it != extra_map.end()) {
-      replacement = it->second;  // 2. config map
+    if (auto cli_it = cli_map.find(var); cli_it != cli_map.end()) {
+      replacement = cli_it->second;  // 1. CLI overrides
+    } else if (const char* env_value = std::getenv(var.c_str());
+               env_value && *env_value) {
+      replacement = env_value;  // 2. environment variables
+    } else if (auto it = properties_map.find(var); it != properties_map.end()) {
+      replacement = it->second;  // 3. properties fallback
     } else if (!default_val.empty()) {
-      replacement = default_val;  // 3. default in pattern
+      replacement = default_val;  // 4. default in pattern
     } else {
-      // 4. leave unresolved pattern intact; advance past it
+      // 5. leave unresolved pattern intact; advance past it
       pos = end + 1;
       continue;
     }
@@ -195,26 +198,29 @@ std::string replace_env_var(
 }
 
 // Function to substitute environment variables in JSON values
-void substitue_envs(boost::json::value& jv,
-                    const std::map<std::string, std::string>& extra_map) {
+void substitue_envs(
+  boost::json::value& jv,
+  const std::map<std::string, std::string>& cli_map,
+  const std::map<std::string, std::string>& properties_map) {
   switch (jv.kind()) {
     case boost::json::kind::object: {
       auto& obj = jv.get_object();
       for (auto& [key, value] : obj) {
-        substitue_envs(value, extra_map);  // Recurse into nested values
+  substitue_envs(value, cli_map, properties_map);  // Recurse nested
       }
       break;
     }
     case boost::json::kind::array: {
       auto& arr = jv.get_array();
       for (auto& element : arr) {
-        substitue_envs(element, extra_map);  // Recurse into array elements
+  substitue_envs(element, cli_map, properties_map);  // Recurse arrays
       }
       break;
     }
     case boost::json::kind::string: {
       std::string original = jv.get_string().c_str();
-      std::string substituted = replace_env_var(original, extra_map);
+    std::string substituted =
+      replace_env_var(original, cli_map, properties_map);
       jv = substituted;  // Update the JSON value with substituted string
       break;
     }

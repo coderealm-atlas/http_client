@@ -58,9 +58,13 @@ struct ConfigSources {
   // value from application.json will be overridden by values from
   // application.{profile}.json.
   std::optional<json::value> application_json;
+  std::map<std::string, std::string> cli_overrides_;
 
-  ConfigSources(std::vector<fs::path> paths, std::vector<std::string> profiles)
-      : paths_(std::move(paths)), profiles(std::move(profiles)) {
+  ConfigSources(std::vector<fs::path> paths, std::vector<std::string> profiles,
+                std::map<std::string, std::string> cli_overrides = {})
+      : paths_(std::move(paths)),
+        profiles(std::move(profiles)),
+        cli_overrides_(std::move(cli_overrides)) {
     // helper: deep merge two json values (objects only)
     // DEBUG_PRINT("initialize ConfigSources with paths_: "
     //             << paths_.size() << ", profiles: " << profiles.size());
@@ -146,6 +150,20 @@ struct ConfigSources {
         std::cerr << "File does not exist or is not a regular file: "
                   << app_json_path << std::endl;
       }
+    }
+  }
+
+  const std::map<std::string, std::string>& cli_overrides() const {
+    return cli_overrides_;
+  }
+
+  void set_cli_override(std::string key, std::string value) {
+    cli_overrides_[std::move(key)] = std::move(value);
+  }
+
+  void merge_cli_overrides(std::map<std::string, std::string> overrides) {
+    for (auto& [k, v] : overrides) {
+      cli_overrides_[std::move(k)] = std::move(v);
     }
   }
 
@@ -506,6 +524,10 @@ struct AppProperties {
           processed_files.push_back(path);
         }
       }
+    }
+
+    for (const auto& [key, value] : config_sources.cli_overrides()) {
+      properties[key] = value;
     }
   }
 };

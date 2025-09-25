@@ -31,10 +31,12 @@ MyResult<std::reference_wrapper<const json::value>> reference_value_at(
 
 std::string replace_env_var(
     const std::string& input,
-    const std::map<std::string, std::string>& extra_map);
+    const std::map<std::string, std::string>& cli_map,
+    const std::map<std::string, std::string>& properties_map);
 
 void substitue_envs(json::value& jv,
-                    const std::map<std::string, std::string>& extra_map);
+                    const std::map<std::string, std::string>& cli_map,
+                    const std::map<std::string, std::string>& properties_map);
 
 void pretty_print(std::ostream& os, json::value const& jv,
                   std::string* indent = nullptr);

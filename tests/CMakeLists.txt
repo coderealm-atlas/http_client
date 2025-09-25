@@ -50,12 +50,18 @@ add_test(
         NAME ${T_NAME}.missing
         COMMAND ${T_NAME} --gtest_filter=ConfigSourcesTest.MissingJsonReturnsError
         WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+add_test(
+        NAME ${T_NAME}.cli_overrides
+        COMMAND ${T_NAME} --gtest_filter=ConfigSourcesTest.CliOverridesPropagateToAppProperties
+        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 # Mark as network-dependent and optionally disable via env flag
 set_tests_properties(${T_NAME}.merge PROPERTIES LABELS "network")
 set_tests_properties(${T_NAME}.missing PROPERTIES LABELS "network")
+set_tests_properties(${T_NAME}.cli_overrides PROPERTIES LABELS "network")
 if("$ENV{HTTPCLIENT_SKIP_NETWORK_TESTS}" STREQUAL "1")
     set_tests_properties(${T_NAME}.merge PROPERTIES DISABLED TRUE)
     set_tests_properties(${T_NAME}.missing PROPERTIES DISABLED TRUE)
+    set_tests_properties(${T_NAME}.cli_overrides PROPERTIES DISABLED TRUE)
 endif()
 #
 # unit tests:
