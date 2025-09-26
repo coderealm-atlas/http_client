@@ -417,6 +417,26 @@ template <typename T>
 using MyResult = monad::Result<T, Error>;
 using MyVoidResult = Result<void, Error>;
 
+namespace detail {
+template <typename X>
+struct unwrap_result_type {
+  using type = X;
+  static constexpr bool is_wrapped = false;
+};
+
+template <typename U>
+struct unwrap_result_type<Result<U, Error>> {
+  using type = U;
+  static constexpr bool is_wrapped = true;
+};
+}  // namespace detail
+
+template <typename X>
+using unwrap_result_t = typename detail::unwrap_result_type<X>::type;
+
+template <typename X>
+inline constexpr bool is_my_result_v = detail::unwrap_result_type<X>::is_wrapped;
+
 // Common Result aliases (E = Error)
 using StringResult = Result<std::string, Error>;
 using BoolResult = Result<bool, Error>;

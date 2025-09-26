@@ -783,17 +783,17 @@ TEST(ErrorDataTest, with_data_content) {
 }
 TEST(ApiResponseTest, deleted_construct) {
   using namespace apihandler;
-  ApiResponse<int> response(42, "text/plain");
+  ApiDataResponse<int> response(42, "text/plain");
   EXPECT_EQ(
       response.data.index(),
       1);  // Should be int, we added a monostate, so the index() became 1.
   EXPECT_EQ(response.content_type, "text/plain");
 
-  ApiResponse<int> response1 = response;  // copyable
+  ApiDataResponse<int> response1 = response;  // copyable
 
   int i = 5;
-  // ApiResponse<int> response3(i, "text/plain");  // Should not compile, as it
-  // is deleted ApiResponse<int> response3(i);
+  // ApiDataResponse<int> response3(i, "text/plain");  // Should not compile, as it
+  // is deleted ApiDataResponse<int> response3(i);
 }
 
 TEST(IOTest, current_dir) {

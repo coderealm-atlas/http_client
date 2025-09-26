@@ -5,9 +5,11 @@
 #include <boost/core/detail/string_view.hpp>
 #include <boost/json/serializer.hpp>
 #include <format>
+#include <exception>
 #include <memory>
 #include <optional>
 #include <string>
+#include <type_traits>
 #include <utility>
 
 #include "http_client_manager.hpp"
@@ -167,9 +169,39 @@ struct HttpExchange {
   }
 
   template <typename T>
-  MyResult<T> parseJsonResponse() {
-    return getJsonResponse().and_then([](json::value jv) -> MyResult<T> {
-      return MyResult<T>::Ok(json::value_to<T>(jv));
+  auto parseJsonResponse() -> MyResult<std::decay_t<T>> {
+    using ValueType = std::decay_t<T>;
+    static_assert(!is_my_result_v<ValueType>,
+                  "Use parseJsonResponseResult for MyResult payloads");
+    static_assert(!std::is_void_v<ValueType>,
+                  "parseJsonResponse does not support void payloads");
+
+    return getJsonResponse().and_then([](json::value jv)
+                                          -> MyResult<ValueType> {
+      try {
+        return MyResult<ValueType>::Ok(json::value_to<ValueType>(jv));
+      } catch (const std::exception& e) {
+        return MyResult<ValueType>::Err(
+            Error{500, std::string("Failed to convert JSON response: ") +
+                            e.what()});
+      }
+    });
+  }
+
+  template <typename ResultT>
+  auto parseJsonResponseResult() -> std::decay_t<ResultT> {
+    using Requested = std::decay_t<ResultT>;
+    static_assert(is_my_result_v<Requested>,
+                  "parseJsonResponseResult expects a MyResult payload");
+
+    return getJsonResponse().and_then([](json::value jv) -> Requested {
+      try {
+        return json::value_to<Requested>(jv);
+      } catch (const std::exception& e) {
+        return Requested::Err(Error{
+            500, std::string("Failed to convert JSON response result: ") +
+                     e.what()});
+      }
     });
   }
 

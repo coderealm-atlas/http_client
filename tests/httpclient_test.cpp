@@ -13,8 +13,10 @@
 #include <cstdio>
 #include <iostream>
 #include <memory>
+#include <type_traits>
 
 #include "api_handler_base.hpp"
+#include "api_response_result.hpp"
 #include "client_ssl_ctx.hpp"
 #include "http_client_config_provider.hpp"
 #include "http_client_manager.hpp"
@@ -631,6 +633,60 @@ TEST(DataShapeTest, vec) {
       return id == other.id && name == other.name;
     }
   };
-  apihandler::ApiResponse<SimpleData> resp(
+  apihandler::ApiDataResponse<SimpleData> resp(
       std::vector<SimpleData>{{1, "one"}, {2, "two"}});
+}
+
+TEST(HttpExchangeTest, ParseJsonResponseResultSuccess) {
+  using Request = monad::http::request<monad::http::empty_body>;
+  using Response = monad::http::response<monad::http::string_body>;
+
+  auto url_result = urls::parse_uri("http://example.com/api");
+  ASSERT_TRUE(url_result);
+
+  monad::HttpExchange<Request, Response> exchange(
+      url_result.value(), {monad::http::verb::get, monad::DEFAULT_TARGET, 11});
+
+  Response resp{monad::http::status::ok, 11};
+  resp.body() = R"({"data": 123})";
+  exchange.response = resp;
+
+  auto result = exchange.parseJsonResponseResult<apihandler::ApiResponseResult<int>>();
+  static_assert(std::is_same_v<decltype(result), apihandler::ApiResponseResult<int>>);
+  ASSERT_TRUE(result.is_ok());
+  const auto& data = result.value();
+  ASSERT_TRUE(data.is_single());
+  EXPECT_EQ(std::get<int>(data.data), 123);
+
+  Response direct_resp{monad::http::status::ok, 11};
+  direct_resp.body() = "321";
+  exchange.response = direct_resp;
+
+  auto direct = exchange.parseJsonResponse<int>();
+  ASSERT_TRUE(direct.is_ok());
+  EXPECT_EQ(direct.value(), 321);
+}
+
+TEST(HttpExchangeTest, ParseJsonResponseResultServerError) {
+  using Request = monad::http::request<monad::http::empty_body>;
+  using Response = monad::http::response<monad::http::string_body>;
+
+  auto url_result = urls::parse_uri("http://example.com/api");
+  ASSERT_TRUE(url_result);
+
+  monad::HttpExchange<Request, Response> exchange(
+      url_result.value(), {monad::http::verb::get, monad::DEFAULT_TARGET, 11});
+
+  Response resp{monad::http::status::bad_request, 11};
+  resp.body() = R"({"error": {"code": 409, "what": "Conflict"}})";
+  exchange.response = resp;
+
+  auto result = exchange.parseJsonResponseResult<apihandler::ApiResponseResult<int>>();
+  ASSERT_TRUE(result.is_err());
+  const auto& err = result.error();
+  EXPECT_EQ(err.code, 409);
+  EXPECT_NE(err.what.find("Conflict"), std::string::npos);
+
+  auto status_result = exchange.expect_2xx();
+  ASSERT_TRUE(status_result.is_err());
 }
