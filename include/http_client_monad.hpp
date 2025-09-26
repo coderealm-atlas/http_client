@@ -4,8 +4,8 @@
 #include <boost/beast/http/empty_body.hpp>
 #include <boost/core/detail/string_view.hpp>
 #include <boost/json/serializer.hpp>
-#include <format>
 #include <exception>
+#include <format>
 #include <memory>
 #include <optional>
 #include <string>
@@ -119,7 +119,8 @@ struct HttpExchange {
     contentTypeJson();
   }
 
-  std::optional<std::string> getResponseCookie(const std::string& cookie_name) {
+  std::optional<std::string> getResponseCookie(
+      const std::string& cookie_name = "cjj365") {
     if (!response.has_value()) return std::nullopt;
 
     const auto& fields = response->base();
@@ -176,16 +177,16 @@ struct HttpExchange {
     static_assert(!std::is_void_v<ValueType>,
                   "parseJsonResponse does not support void payloads");
 
-    return getJsonResponse().and_then([](json::value jv)
-                                          -> MyResult<ValueType> {
-      try {
-        return MyResult<ValueType>::Ok(json::value_to<ValueType>(jv));
-      } catch (const std::exception& e) {
-        return MyResult<ValueType>::Err(
-            Error{500, std::string("Failed to convert JSON response: ") +
-                            e.what()});
-      }
-    });
+    return getJsonResponse().and_then(
+        [](json::value jv) -> MyResult<ValueType> {
+          try {
+            return MyResult<ValueType>::Ok(json::value_to<ValueType>(jv));
+          } catch (const std::exception& e) {
+            return MyResult<ValueType>::Err(Error{
+                500,
+                std::string("Failed to convert JSON response: ") + e.what()});
+          }
+        });
   }
 
   template <typename ResultT>
@@ -198,9 +199,9 @@ struct HttpExchange {
       try {
         return json::value_to<Requested>(jv);
       } catch (const std::exception& e) {
-        return Requested::Err(Error{
-            500, std::string("Failed to convert JSON response result: ") +
-                     e.what()});
+        return Requested::Err(
+            Error{500, std::string("Failed to convert JSON response result: ") +
+                           e.what()});
       }
     });
   }
