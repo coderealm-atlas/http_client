@@ -28,6 +28,7 @@ MyResult<std::reference_wrapper<const json::object>> reference_object_at(
 
 MyResult<std::reference_wrapper<const json::value>> reference_value_at(
     const json::value& val, std::string_view k1);
+bool bool_from_json_ob(const json::value& jv, const std::string& key);
 
 std::string replace_env_var(
     const std::string& input,

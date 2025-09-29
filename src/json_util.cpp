@@ -149,9 +149,8 @@ monad::MyVoidResult expect_true_at(const json::value& val,
 // Helper function to replace ${VARIABLE} or ${VARIABLE:-default} with the
 // environment variable
 std::string replace_env_var(
-  const std::string& input,
-  const std::map<std::string, std::string>& cli_map,
-  const std::map<std::string, std::string>& properties_map) {
+    const std::string& input, const std::map<std::string, std::string>& cli_map,
+    const std::map<std::string, std::string>& properties_map) {
   std::string output = input;
   size_t pos = 0;
   while (true) {
@@ -198,29 +197,28 @@ std::string replace_env_var(
 }
 
 // Function to substitute environment variables in JSON values
-void substitue_envs(
-  boost::json::value& jv,
-  const std::map<std::string, std::string>& cli_map,
-  const std::map<std::string, std::string>& properties_map) {
+void substitue_envs(boost::json::value& jv,
+                    const std::map<std::string, std::string>& cli_map,
+                    const std::map<std::string, std::string>& properties_map) {
   switch (jv.kind()) {
     case boost::json::kind::object: {
       auto& obj = jv.get_object();
       for (auto& [key, value] : obj) {
-  substitue_envs(value, cli_map, properties_map);  // Recurse nested
+        substitue_envs(value, cli_map, properties_map);  // Recurse nested
       }
       break;
     }
     case boost::json::kind::array: {
       auto& arr = jv.get_array();
       for (auto& element : arr) {
-  substitue_envs(element, cli_map, properties_map);  // Recurse arrays
+        substitue_envs(element, cli_map, properties_map);  // Recurse arrays
       }
       break;
     }
     case boost::json::kind::string: {
       std::string original = jv.get_string().c_str();
-    std::string substituted =
-      replace_env_var(original, cli_map, properties_map);
+      std::string substituted =
+          replace_env_var(original, cli_map, properties_map);
       jv = substituted;  // Update the JSON value with substituted string
       break;
     }
@@ -303,7 +301,6 @@ void pretty_print(std::ostream& os, json::value const& jv,
   if (indent->empty()) os << "\n";
 }
 
-
 bool bool_from_json_ob(const json::value& jv, const std::string& key) {
   const json::value* jv_p =
       key.empty()
@@ -319,12 +316,10 @@ bool bool_from_json_ob(const json::value& jv, const std::string& key) {
       if (id_v_p->empty()) {
         return false;
       }
-      if (*id_v_p == "true") {
+      if (*id_v_p == "true" || *id_v_p == "1" || *id_v_p == "yes" ||
+          *id_v_p == "on") {
         return true;
-      } else if (*id_v_p == "false") {
-        return false;
       } else {
-        std::cerr << "I can't convert it to a bool: " << *jv_p << std::endl;
         return false;
       }
     } else {
