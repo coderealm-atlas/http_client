@@ -43,13 +43,27 @@ struct HttpExchange {
   HttpExchange(const urls::url_view& url_input, Req request)
       : url(url_input), request(std::move(request)) {}
 
+  // Note: call this when the request target must preserve the exact encoded
+  // path/query computed by boost::url (e.g. GitHub OAuth token exchange).
+  // It bypasses the default behaviour in `http_request_io`, which rebuilds the
+  // target using decoded components and may lose reserved characters.  The
+  // method also sets the Host header explicitly so upstream proxies or
+  // servers (that require the original host:port) see the value untouched.
+  // Typical usage is to call `setHostTargetRaw()` and then set
+  // `no_modify_req = true` so that the request is forwarded as-is.
   void setHostTargetRaw() {
-    std::string target = url.path().empty() ? "/" : url.path();
-    if (!url.query().empty()) {
-      target = std::format("{}?{}", target, url.query());
+    std::string target = url.encoded_path().empty() ? "/"
+                                                   : std::string(url.encoded_path());
+    if (!url.encoded_query().empty()) {
+      target = std::format("{}?{}", target, std::string(url.encoded_query()));
     }
     request.target(target);
-    request.set(http::field::host, url.host());
+    std::string host_header = std::string(url.host());
+    if (url.has_port()) {
+      host_header.push_back(':');
+      host_header += std::string(url.port());
+    }
+    request.set(http::field::host, std::move(host_header));
   }
 
   void contentTypeJson() {

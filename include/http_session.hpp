@@ -247,7 +247,7 @@ class session {
             self->resolver_.cancel();
           }
         }));
-
+    BOOST_LOG_SEV(lg, trivial::debug) << "resolving " << host << ":" << port;
     resolver_.async_resolve(host, port,
                             [self = derived().shared_from_this()](
                                 boost::beast::error_code ec,
@@ -258,6 +258,14 @@ class session {
                                     << "resolve: " << ec.message();
                                 self->deliver(std::nullopt, 1);
                               } else {
+                                BOOST_LOG_SEV(self->lg, trivial::debug)
+                                    << "resolve done, results size: "
+                                    << results.size();
+                                if (results.size() > 0) {
+                                  BOOST_LOG_SEV(self->lg, trivial::debug)
+                                      << "first result: "
+                                      << results.begin()->endpoint();
+                                }
                                 self->do_connect(results);
                               }
                             });
