@@ -100,13 +100,14 @@ class session {
  public:
   void run() {
     std::string_view port = this->url_.port();
-    if (port.empty()) {
+    bool has_explicit_port = !port.empty();
+    if (!has_explicit_port) {
       port = default_port_;
     }
     if (no_modify_req_) {
       return do_resolve(this->url_.host(), port);
     }
-    if (port.empty()) {
+    if (port.empty() || !has_explicit_port) {
       req_.set(http::field::host, this->url_.host());
     } else {
       req_.set(http::field::host, this->url_.host() + ":" + std::string(port));
