@@ -80,9 +80,6 @@ class IoContextManager : public IIoContextManager {
     }
     threads_.clear();
   }
-  ~IoContextManager() {
-    output_.debug() << "IoContextManager destructor called." << std::endl;
-    stop();
-  }
+  ~IoContextManager() { stop(); }
 };
 }  // namespace cjj365
