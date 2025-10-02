@@ -9,9 +9,11 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <type_traits>
 #include <utility>
 
+#include "common_macros.hpp"
 #include "http_client_manager.hpp"
 #include "io_monad.hpp"
 #include "result_monad.hpp"
@@ -40,6 +42,24 @@ struct HttpExchange {
   urls::url url;
   std::chrono::seconds timeout = std::chrono::seconds(30);
 
+  static constexpr int JSON_ERR_MALFORMED = 9000;
+  static constexpr int JSON_ERR_DECODE = 9001;
+  static constexpr int JSON_ERR_TYPE_MISMATCH = 9003;
+  static constexpr int JSON_ERR_MISSING_FIELD = 9004;
+  static constexpr int JSON_ERR_INVALID_SCHEMA = 9005;
+
+  static std::string make_preview(std::string_view text) {
+    constexpr std::size_t max_preview = 512;
+    if (text.size() <= max_preview) {
+      return std::string{text};
+    }
+    std::string preview;
+    preview.reserve(max_preview + 3);
+    preview.append(text.substr(0, max_preview));
+    preview.append("...");
+    return preview;
+  }
+
   HttpExchange(const urls::url_view& url_input, Req request)
       : url(url_input), request(std::move(request)) {}
 
@@ -52,8 +72,8 @@ struct HttpExchange {
   // Typical usage is to call `setHostTargetRaw()` and then set
   // `no_modify_req = true` so that the request is forwarded as-is.
   void setHostTargetRaw() {
-    std::string target = url.encoded_path().empty() ? "/"
-                                                   : std::string(url.encoded_path());
+    std::string target =
+        url.encoded_path().empty() ? "/" : std::string(url.encoded_path());
     if (!url.encoded_query().empty()) {
       target = std::format("{}?{}", target, std::string(url.encoded_query()));
     }
@@ -191,14 +211,87 @@ struct HttpExchange {
     static_assert(!std::is_void_v<ValueType>,
                   "parseJsonResponse does not support void payloads");
 
+    const int response_status =
+        response.has_value() ? static_cast<int>(response->result_int()) : 0;
+    const std::string response_body =
+        response.has_value() ? response->body() : std::string{};
+    const std::string response_body_preview = make_preview(response_body);
+
     return getJsonResponse().and_then(
-        [](json::value jv) -> MyResult<ValueType> {
+        [response_status, response_body_preview](json::value jv)
+            -> MyResult<ValueType> {
+          DEBUG_PRINT("JSON response before parse: {}\n" << jv);
           try {
             return MyResult<ValueType>::Ok(json::value_to<ValueType>(jv));
           } catch (const std::exception& e) {
-            return MyResult<ValueType>::Err(Error{
-                500,
-                std::string("Failed to convert JSON response: ") + e.what()});
+            Error err{JSON_ERR_TYPE_MISMATCH,
+                      std::string("JSON type mismatch: ") + e.what()};
+            err.response_status = response_status;
+            auto preview = response_body_preview;
+            if (preview.empty()) {
+              preview = HttpExchange::make_preview(json::serialize(jv));
+            }
+            err.params["response_body_preview"] = std::move(preview);
+            return MyResult<ValueType>::Err(std::move(err));
+          }
+        });
+  }
+
+  template <typename T>
+  auto parseJsonDataResponse() -> MyResult<std::decay_t<T>> {
+    using ValueType = std::decay_t<T>;
+    static_assert(!is_my_result_v<ValueType>,
+                  "Use parseJsonResponseResult for MyResult payloads");
+    static_assert(!std::is_void_v<ValueType>,
+                  "parseJsonDataResponse does not support void payloads");
+
+    const int response_status =
+        response.has_value() ? static_cast<int>(response->result_int()) : 0;
+    const std::string response_body =
+        response.has_value() ? response->body() : std::string{};
+    const std::string response_body_preview = make_preview(response_body);
+
+    return getJsonResponse().and_then(
+        [response_status, response_body_preview](json::value jv)
+            -> MyResult<ValueType> {
+          DEBUG_PRINT("JSON data response before parse: {}\n" << jv);
+          try {
+            if (!jv.is_object()) {
+              Error err{JSON_ERR_INVALID_SCHEMA,
+                        "JSON does not conform to expected schema"};
+              err.response_status = response_status;
+              auto preview = response_body_preview;
+              if (preview.empty()) {
+                preview = HttpExchange::make_preview(json::serialize(jv));
+              }
+              err.params["response_body_preview"] = std::move(preview);
+              return MyResult<ValueType>::Err(std::move(err));
+            }
+            const auto& obj = jv.as_object();
+            auto it = obj.find("data");
+            if (it == obj.end()) {
+              Error err{JSON_ERR_MISSING_FIELD,
+                        "Required JSON field missing: 'data'"};
+              err.response_status = response_status;
+              auto preview = response_body_preview;
+              if (preview.empty()) {
+                preview = HttpExchange::make_preview(json::serialize(jv));
+              }
+              err.params["response_body_preview"] = std::move(preview);
+              return MyResult<ValueType>::Err(std::move(err));
+            }
+            return MyResult<ValueType>::Ok(
+                json::value_to<ValueType>(it->value()));
+          } catch (const std::exception& e) {
+            Error err{JSON_ERR_TYPE_MISMATCH,
+                      std::string("JSON type mismatch: ") + e.what()};
+            err.response_status = response_status;
+            auto preview = response_body_preview;
+            if (preview.empty()) {
+              preview = HttpExchange::make_preview(json::serialize(jv));
+            }
+            err.params["response_body_preview"] = std::move(preview);
+            return MyResult<ValueType>::Err(std::move(err));
           }
         });
   }
@@ -209,13 +302,28 @@ struct HttpExchange {
     static_assert(is_my_result_v<Requested>,
                   "parseJsonResponseResult expects a MyResult payload");
 
-    return getJsonResponse().and_then([](json::value jv) -> Requested {
+    const int response_status =
+        response.has_value() ? static_cast<int>(response->result_int()) : 0;
+    const std::string response_body =
+        response.has_value() ? response->body() : std::string{};
+    const std::string response_body_preview = make_preview(response_body);
+
+    return getJsonResponse().and_then(
+        [response_status, response_body_preview](json::value jv) -> Requested {
+      DEBUG_PRINT("JSON response result before parse: {}\n" << jv);
       try {
         return json::value_to<Requested>(jv);
       } catch (const std::exception& e) {
-        return Requested::Err(
-            Error{500, std::string("Failed to convert JSON response result: ") +
-                           e.what()});
+        Error err{JSON_ERR_INVALID_SCHEMA,
+                  std::string("JSON does not conform to expected schema: ") +
+                      e.what()};
+        err.response_status = response_status;
+        auto preview = response_body_preview;
+        if (preview.empty()) {
+          preview = HttpExchange::make_preview(json::serialize(jv));
+        }
+        err.params["response_body_preview"] = std::move(preview);
+        return Requested::Err(std::move(err));
       }
     });
   }
@@ -225,29 +333,39 @@ struct HttpExchange {
       if (response.has_value()) {
         const auto& response_string = response->body();
         if (response_string.empty()) {
-          return MyResult<json::value>::Err(
-              Error{400, "Response body is empty"});
+          Error err{JSON_ERR_MALFORMED,
+                    "Malformed JSON text: response body is empty"};
+          err.response_status = static_cast<int>(response->result_int());
+          err.params["response_body_preview"] =
+              make_preview(response->body());
+          return MyResult<json::value>::Err(std::move(err));
         }
         return MyResult<json::value>::Ok(json::parse(response_string));
       } else {
-        return MyResult<json::value>::Err(
-            Error{400, "Response is not available or empty"});
+        Error err{JSON_ERR_DECODE,
+                  "Failed to decode/parse JSON (low-level): response is not available"};
+        err.response_status = 0;
+        return MyResult<json::value>::Err(std::move(err));
       }
     } catch (const std::exception& e) {
       BOOST_LOG_SEV(lg, trivial::error)
           << "Failed to get JSON response: " << e.what();
       if (response.has_value()) {
-        std::string max_100_chars = response->body();
-        if (max_100_chars.length() > 100) {
-          max_100_chars = max_100_chars.substr(0, 100) + "...";
-        }
-        BOOST_LOG_SEV(lg, trivial::error) << "Reponse body: " << max_100_chars;
-        return MyResult<json::value>::Err(Error{
-            500, std::format("Failed to parse JSON response: {}, body:\n{}",
-                             e.what(), max_100_chars)});
+        std::string preview = make_preview(response->body());
+        BOOST_LOG_SEV(lg, trivial::error)
+            << "Response body preview: " << preview;
+        Error err{
+            JSON_ERR_DECODE,
+            std::format("Failed to decode/parse JSON (low-level): {}", e.what())};
+        err.response_status = static_cast<int>(response->result_int());
+        err.params["response_body_preview"] = std::move(preview);
+        return MyResult<json::value>::Err(std::move(err));
       } else {
-        return MyResult<json::value>::Err(Error{
-            500, std::string("Failed to parse JSON response: ") + e.what()});
+        Error err{JSON_ERR_DECODE,
+                  std::string("Failed to decode/parse JSON (low-level): ") +
+                      e.what()};
+        err.response_status = 0;
+        return MyResult<json::value>::Err(std::move(err));
       }
     }
   }

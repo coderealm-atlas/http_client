@@ -667,6 +667,46 @@ TEST(HttpExchangeTest, ParseJsonResponseResultSuccess) {
   EXPECT_EQ(direct.value(), 321);
 }
 
+TEST(HttpExchangeTest, ParseJsonDataResponseSuccess) {
+  using Request = monad::http::request<monad::http::empty_body>;
+  using Response = monad::http::response<monad::http::string_body>;
+
+  auto url_result = urls::parse_uri("http://example.com/api");
+  ASSERT_TRUE(url_result);
+
+  monad::HttpExchange<Request, Response> exchange(
+      url_result.value(), {monad::http::verb::get, monad::DEFAULT_TARGET, 11});
+
+  Response resp{monad::http::status::ok, 11};
+  resp.body() = R"({"data": 456})";
+  exchange.response = resp;
+
+  auto result = exchange.parseJsonDataResponse<int>();
+  ASSERT_TRUE(result.is_ok());
+  EXPECT_EQ(result.value(), 456);
+}
+
+TEST(HttpExchangeTest, ParseJsonDataResponseMissingData) {
+  using Request = monad::http::request<monad::http::empty_body>;
+  using Response = monad::http::response<monad::http::string_body>;
+
+  auto url_result = urls::parse_uri("http://example.com/api");
+  ASSERT_TRUE(url_result);
+
+  monad::HttpExchange<Request, Response> exchange(
+      url_result.value(), {monad::http::verb::get, monad::DEFAULT_TARGET, 11});
+
+  Response resp{monad::http::status::ok, 11};
+  resp.body() = R"({"message": "no data"})";
+  exchange.response = resp;
+
+  auto result = exchange.parseJsonDataResponse<int>();
+  ASSERT_TRUE(result.is_err());
+  const auto& err = result.error();
+  EXPECT_EQ(err.code, 9004);
+  EXPECT_NE(err.what.find("Required JSON field missing"), std::string::npos);
+}
+
 TEST(HttpExchangeTest, ParseJsonResponseResultServerError) {
   using Request = monad::http::request<monad::http::empty_body>;
   using Response = monad::http::response<monad::http::string_body>;
