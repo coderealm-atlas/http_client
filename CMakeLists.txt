@@ -52,15 +52,30 @@ add_compile_definitions(-DGOOGLE_PROTOBUF_NO_CONSTINIT)
 add_compile_definitions(-DC4_MSVC)
 endif()
 
-# ---------------- ASAN Setup ----------------
-option(ENABLE_ASAN "Enable AddressSanitizer" OFF)
 if(ENABLE_ASAN)
-    message(STATUS "AddressSanitizer enabled")
-    set(ASAN_FLAGS "-fsanitize=address -fno-omit-frame-pointer -g")
-    add_compile_options(${ASAN_FLAGS})
-    add_link_options(${ASAN_FLAGS})
+    if(NOT (CMAKE_CXX_COMPILER_ID MATCHES "Clang" OR CMAKE_CXX_COMPILER_ID MATCHES "GNU"))
+        message(FATAL_ERROR "ENABLE_ASAN requires Clang or GCC toolchains")
+    endif()
+
+    add_compile_options(
+        "$<$<COMPILE_LANGUAGE:CXX>:-fsanitize=address>"
+        "$<$<COMPILE_LANGUAGE:CXX>:-fno-omit-frame-pointer>"
+        "$<$<COMPILE_LANGUAGE:C>:-fsanitize=address>"
+        "$<$<COMPILE_LANGUAGE:C>:-fno-omit-frame-pointer>"
+    )
+
+    add_link_options(-fsanitize=address -fno-omit-frame-pointer)
+
+    if(CMAKE_BUILD_TYPE STREQUAL "Debug")
+        add_compile_options(
+            "$<$<COMPILE_LANGUAGE:CXX>:-fdiagnostics-color=always>"
+            "$<$<COMPILE_LANGUAGE:C>:-fdiagnostics-color=always>"
+        )
+    endif()
+
+    message(STATUS "AddressSanitizer enabled (ENABLE_ASAN=ON)")
 else()
-    message(STATUS "AddressSanitizer disabled")
+    message(STATUS "AddressSanitizer disabled (ENABLE_ASAN=OFF)")
 endif()
 
 # ---------------- Build Type Flags ----------------

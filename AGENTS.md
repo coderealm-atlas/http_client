@@ -11,8 +11,8 @@ This repository is a C++20 HTTP client built with CMake and vcpkg. Use the guida
 - Utilities: `gen_error.py` (see below), `error_codes.ini`.
 
 ## Build, Test, and Development Commands
-- Configure (Debug): `cmake --preset debug`
-- Build: `cmake --build --preset debug`
+- Configure (Debug): `cmake --preset debug-asan`
+- Build: `cmake --build --preset debug-asan`
 - Run all tests: `ctest --output-on-failure --test-dir build`
 - Run one test: `ctest -R io_monad_test --test-dir build`
 - Enable ASan: `cmake --preset debug-asan`

@@ -45,21 +45,10 @@
     },
     {
       "name": "debug-asan",
-      "inherits": "default",
-      "description": "Debug build",
-      "environment": {
-        "CAN_ACCESS_IN_PORT": "by $ENV{CAN_ACCESS_IN_PORT}",
-        "ASAN_OPTIONS": "allocator_may_return_null=1",
-        "CMAKE_MAKE_PROGRAM": "colormake"
-      },
+      "inherits": "debug",
+      "description": "Debug build with ASan enabled",
       "cacheVariables": {
-        "CMAKE_BUILD_TYPE": "Debug",
-        "ENABLE_ASAN": "ON",
-        "VCPKG_TARGET_TRIPLET": "x64-linux-dynamic-link",
-        "CMAKE_TOOLCHAIN_FILE": "$env{VCPKG_DIR}/vcpkg/scripts/buildsystems/vcpkg.cmake",
-        "CMAKE_C_COMPILER_LAUNCHER": "ccache",
-        "CMAKE_CXX_COMPILER_LAUNCHER": "ccache",
-        "CMAKE_CUDA_COMPILER_LAUNCHER": "ccache"
+        "ENABLE_ASAN": "ON"
       }
     },
     {
@@ -86,6 +75,10 @@
     {
       "name": "debug",
       "configurePreset": "debug"
+    },
+    {
+      "name": "debug-asan",
+      "configurePreset": "debug-asan"
     },
     {
       "name": "w64",
