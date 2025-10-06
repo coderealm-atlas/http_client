@@ -254,7 +254,7 @@ struct HttpExchange {
     return getJsonResponse().and_then(
         [response_status, response_body_preview](json::value jv)
             -> MyResult<ValueType> {
-          DEBUG_PRINT("JSON data response before parse: {}\n" << jv);
+          DEBUG_PRINT("JSON data response before parse: " << jv);
           try {
             if (!jv.is_object()) {
               Error err{JSON_ERR_INVALID_SCHEMA,
