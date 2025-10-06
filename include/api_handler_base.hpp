@@ -186,7 +186,11 @@ struct ResponseGenerator {
     res.result(status);
 
     boost::beast::error_code bec;
+#ifdef _WIN32
+    res.body().open(d.path.generic_string().c_str(), boost::beast::file_mode::scan, bec);
+#else
     res.body().open(d.path.c_str(), boost::beast::file_mode::scan, bec);
+#endif
     if (bec) {
       return monad::IO<http::response<http::file_body>>::fail(
           monad::Error{httpclient_errors::RESPONSE::DOWNLOAD_FILE_OPEN_FAILED,

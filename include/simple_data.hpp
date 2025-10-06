@@ -12,6 +12,7 @@
 #include <limits>
 #include <map>
 #include <ostream>
+#include <sstream>
 #include <vector>
 
 #include "result_monad.hpp"
@@ -247,9 +248,9 @@ struct ConfigSources {
     for (auto& path : paths_) {
       oss << "Failed to find JSON file in: " << fs::absolute(path) << std::endl;
     }
+    std::string error_msg = "Failed to find JSON file: " + filename + ", in: " + oss.str();
     return monad::MyResult<json::value>::Err(
-        monad::Error{5019, std::format("Failed to find JSON file: {}, in: {}",
-                                       filename, oss.str())});
+        monad::Error{5019, std::move(error_msg)});
   }
 
   monad::MyResult<cjj365::LoggingConfig> logging_config() const {
@@ -290,8 +291,8 @@ inline EnvParseResult parse_envrc(const fs::path& envrc) {
   std::map<std::string, std::string> env;
   std::ifstream ifs(envrc);
   if (!ifs) {
-    return EnvParseResult::Err(Error{
-        5019, std::format("Failed to open envrc file: {}", envrc.c_str())});
+    std::string error_msg = "Failed to open envrc file: " + envrc.generic_string();
+    return EnvParseResult::Err(Error{5019, std::move(error_msg)});
   }
   while (std::getline(ifs, line)) {
     // Normalize line endings and trim leading/trailing whitespace
@@ -479,9 +480,11 @@ struct AppProperties {
         for (const auto& entry : fs::directory_iterator(path)) {
           if (entry.is_regular_file()) {
             const auto& filename = entry.path().filename().string();
+            bool starts_app = filename.rfind("application.", 0) == 0;
+            bool ends_props = filename.size() >= 11 && filename.substr(filename.size() - 11) == ".properties";
             if (filename == "application.properties" ||
-                filename.starts_with("application.") ||
-                !filename.ends_with(".properties") ||
+                starts_app ||
+                !ends_props ||
                 std::count(filename.begin(), filename.end(), '.') != 1) {
               continue;  // Skip files that don't match the criteria
             }
@@ -494,9 +497,12 @@ struct AppProperties {
           if (entry.is_regular_file()) {
             const auto& filename = entry.path().filename().string();
             for (const auto& profile : config_sources.profiles) {
-              if (filename ==
-                      std::format("application.{}.properties", profile) ||
-                  !filename.ends_with(std::format(".{}.properties", profile)) ||
+              std::string app_profile_props = "application." + profile + ".properties";
+              std::string profile_suffix = "." + profile + ".properties";
+              bool ends_profile = filename.size() >= profile_suffix.size() && 
+                                  filename.substr(filename.size() - profile_suffix.size()) == profile_suffix;
+              if (filename == app_profile_props ||
+                  !ends_profile ||
                   std::count(filename.begin(), filename.end(), '.') != 2) {
                 continue;  // Skip files that don't match the criteria
               }
