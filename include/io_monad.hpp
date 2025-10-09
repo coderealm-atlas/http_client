@@ -379,61 +379,67 @@ class IO {
                      auto cb) mutable {
       auto attempt = std::make_shared<int>(0);
       auto do_attempt = std::make_shared<std::function<void()>>();
+      auto keep_alive_holder =
+          std::make_shared<std::shared_ptr<std::function<void()>>>(do_attempt);
       std::weak_ptr<std::function<void()>> weak_attempt = do_attempt;
 
-      *do_attempt = [attempt, max_attempts, cb, self_ptr, interval, ioc_ptr,
-                     satisfied, retry_on_error, weak_attempt]() mutable {
+      auto release_keep_alive =
+          [keep_alive_holder]() mutable {
+            if (keep_alive_holder && *keep_alive_holder) {
+              keep_alive_holder->reset();
+            }
+          };
+
+      auto handle_result = [attempt, max_attempts, cb, self_ptr, interval,
+                            ioc_ptr, satisfied, retry_on_error, weak_attempt,
+                            keep_alive_holder, release_keep_alive](IOResult r) mutable {
+        auto enqueue_retry = [&]() {
+          auto keep_alive_copy = *keep_alive_holder;
+          auto timer = std::make_shared<boost::asio::steady_timer>(*ioc_ptr);
+          timer->expires_after(interval);
+          timer->async_wait([weak_attempt, keep_alive_holder, keep_alive_copy,
+                             timer, cb, release_keep_alive](
+                                const boost::system::error_code& ec) mutable {
+            if (ec) {
+              release_keep_alive();
+              cb(Result<T, Error>::Err(
+                  Error{1, std::string{"Timer error: "} + ec.message()}));
+            } else {
+              (void)keep_alive_copy;
+              if (auto attempt_fn = weak_attempt.lock()) {
+                (*attempt_fn)();
+              }
+            }
+          });
+        };
+
+        if (r.is_ok()) {
+          const T& v = r.value();
+          if (satisfied(v)) {
+            release_keep_alive();
+            cb(std::move(r));
+          } else {
+            enqueue_retry();
+          }
+        } else {
+          if (!retry_on_error(r.error()) || *attempt >= max_attempts) {
+            release_keep_alive();
+            cb(std::move(r));
+          } else {
+            enqueue_retry();
+          }
+        }
+      };
+
+      *do_attempt = [attempt, max_attempts, cb, self_ptr, handle_result,
+                     release_keep_alive]() mutable {
         if (*attempt >= max_attempts) {
+          release_keep_alive();
           cb(Result<T, Error>::Err(Error{3, "Polling attempts exhausted"}));
           return;
         }
         (*attempt)++;
-        self_ptr->clone().run([attempt, max_attempts, cb, self_ptr, interval,
-                                ioc_ptr, satisfied, retry_on_error,
-                                weak_attempt](IOResult r) mutable {
-          if (r.is_ok()) {
-            const T& v = r.value();
-            if (satisfied(v)) {
-              cb(std::move(r));
-            } else {
-              auto timer = std::make_shared<boost::asio::steady_timer>(*ioc_ptr);
-              timer->expires_after(interval);
-              timer->async_wait([attempt, max_attempts, cb, self_ptr, interval,
-                                 ioc_ptr, satisfied, retry_on_error,
-                                 weak_attempt, timer = timer](
-                                    const boost::system::error_code& ec) mutable {
-                if (ec) {
-                  cb(Result<T, Error>::Err(
-                      Error{1, std::string{"Timer error: "} + ec.message()}));
-                } else {
-                  if (auto attempt_fn = weak_attempt.lock()) {
-                    (*attempt_fn)();
-                  }
-                }
-              });
-            }
-          } else {
-            if (!retry_on_error(r.error()) || *attempt >= max_attempts) {
-              cb(std::move(r));
-            } else {
-              auto timer = std::make_shared<boost::asio::steady_timer>(*ioc_ptr);
-              timer->expires_after(interval);
-              timer->async_wait([attempt, max_attempts, cb, self_ptr, interval,
-                                 ioc_ptr, satisfied, retry_on_error,
-                                 weak_attempt, timer = timer](
-                                    const boost::system::error_code& ec) mutable {
-                if (ec) {
-                  cb(Result<T, Error>::Err(
-                      Error{1, std::string{"Timer error: "} + ec.message()}));
-                } else {
-                  if (auto attempt_fn = weak_attempt.lock()) {
-                    (*attempt_fn)();
-                  }
-                }
-              });
-            }
-          }
-        });
+        self_ptr->clone().run(handle_result);
       };
 
       (*do_attempt)();
@@ -462,61 +468,67 @@ class IO {
                      auto cb) mutable {
       auto attempt = std::make_shared<int>(0);
       auto do_attempt = std::make_shared<std::function<void()>>();
+      auto keep_alive_holder =
+          std::make_shared<std::shared_ptr<std::function<void()>>>(do_attempt);
       std::weak_ptr<std::function<void()>> weak_attempt = do_attempt;
 
-      *do_attempt = [attempt, max_attempts, cb, self_ptr, interval, ex,
-                     satisfied, retry_on_error, weak_attempt]() mutable {
+      auto release_keep_alive =
+          [keep_alive_holder]() mutable {
+            if (keep_alive_holder && *keep_alive_holder) {
+              keep_alive_holder->reset();
+            }
+          };
+
+      auto handle_result = [attempt, max_attempts, cb, self_ptr, interval, ex,
+                            satisfied, retry_on_error, weak_attempt,
+                            keep_alive_holder, release_keep_alive](IOResult r) mutable {
+        auto enqueue_retry = [&]() {
+          auto keep_alive_copy = *keep_alive_holder;
+          auto timer = std::make_shared<boost::asio::steady_timer>(ex);
+          timer->expires_after(interval);
+          timer->async_wait([weak_attempt, keep_alive_holder, keep_alive_copy,
+                             timer, cb, release_keep_alive](
+                                const boost::system::error_code& ec) mutable {
+            if (ec) {
+              release_keep_alive();
+              cb(Result<T, Error>::Err(
+                  Error{1, std::string{"Timer error: "} + ec.message()}));
+            } else {
+              (void)keep_alive_copy;
+              if (auto attempt_fn = weak_attempt.lock()) {
+                (*attempt_fn)();
+              }
+            }
+          });
+        };
+
+        if (r.is_ok()) {
+          const T& v = r.value();
+          if (satisfied(v)) {
+            release_keep_alive();
+            cb(std::move(r));
+          } else {
+            enqueue_retry();
+          }
+        } else {
+          if (!retry_on_error(r.error()) || *attempt >= max_attempts) {
+            release_keep_alive();
+            cb(std::move(r));
+          } else {
+            enqueue_retry();
+          }
+        }
+      };
+
+      *do_attempt = [attempt, max_attempts, cb, self_ptr, handle_result,
+                     release_keep_alive]() mutable {
         if (*attempt >= max_attempts) {
+          release_keep_alive();
           cb(Result<T, Error>::Err(Error{3, "Polling attempts exhausted"}));
           return;
         }
         (*attempt)++;
-        self_ptr->clone().run([attempt, max_attempts, cb, self_ptr, interval,
-                                ex, satisfied, retry_on_error,
-                                weak_attempt](IOResult r) mutable {
-          if (r.is_ok()) {
-            const T& v = r.value();
-            if (satisfied(v)) {
-              cb(std::move(r));
-            } else {
-              auto timer = std::make_shared<boost::asio::steady_timer>(ex);
-              timer->expires_after(interval);
-              timer->async_wait([attempt, max_attempts, cb, self_ptr, interval,
-                                 ex, satisfied, retry_on_error,
-                                 weak_attempt, timer = timer](
-                                    const boost::system::error_code& ec) mutable {
-                if (ec) {
-                  cb(Result<T, Error>::Err(
-                      Error{1, std::string{"Timer error: "} + ec.message()}));
-                } else {
-                  if (auto attempt_fn = weak_attempt.lock()) {
-                    (*attempt_fn)();
-                  }
-                }
-              });
-            }
-          } else {
-            if (!retry_on_error(r.error()) || *attempt >= max_attempts) {
-              cb(std::move(r));
-            } else {
-              auto timer = std::make_shared<boost::asio::steady_timer>(ex);
-              timer->expires_after(interval);
-              timer->async_wait([attempt, max_attempts, cb, self_ptr, interval,
-                                 ex, satisfied, retry_on_error,
-                                 weak_attempt, timer = timer](
-                                    const boost::system::error_code& ec) mutable {
-                if (ec) {
-                  cb(Result<T, Error>::Err(
-                      Error{1, std::string{"Timer error: "} + ec.message()}));
-                } else {
-                  if (auto attempt_fn = weak_attempt.lock()) {
-                    (*attempt_fn)();
-                  }
-                }
-              });
-            }
-          }
-        });
+        self_ptr->clone().run(handle_result);
       };
 
       (*do_attempt)();
@@ -802,60 +814,66 @@ class IO<void> {
                         auto cb) mutable {
       auto attempt = std::make_shared<int>(0);
       auto do_attempt = std::make_shared<std::function<void()>>();
+      auto keep_alive_holder =
+          std::make_shared<std::shared_ptr<std::function<void()>>>(do_attempt);
       std::weak_ptr<std::function<void()>> weak_attempt = do_attempt;
 
-      *do_attempt = [attempt, max_attempts, cb, self_ptr, interval, ioc_ptr,
-                     satisfied, retry_on_error, weak_attempt]() mutable {
+      auto release_keep_alive =
+          [keep_alive_holder]() mutable {
+            if (keep_alive_holder && *keep_alive_holder) {
+              keep_alive_holder->reset();
+            }
+          };
+
+      auto handle_result = [attempt, max_attempts, cb, self_ptr, interval,
+                            ioc_ptr, satisfied, retry_on_error, weak_attempt,
+                            keep_alive_holder, release_keep_alive](IOResult r) mutable {
+        auto enqueue_retry = [&]() {
+          auto keep_alive_copy = *keep_alive_holder;
+          auto timer = std::make_shared<boost::asio::steady_timer>(*ioc_ptr);
+          timer->expires_after(interval);
+          timer->async_wait([weak_attempt, keep_alive_holder, keep_alive_copy,
+                             timer, cb, release_keep_alive](
+                                const boost::system::error_code& ec) mutable {
+            if (ec) {
+              release_keep_alive();
+              cb(Result<void, Error>::Err(
+                  Error{1, std::string{"Timer error: "} + ec.message()}));
+            } else {
+              (void)keep_alive_copy;
+              if (auto attempt_fn = weak_attempt.lock()) {
+                (*attempt_fn)();
+              }
+            }
+          });
+        };
+
+        if (r.is_ok()) {
+          if (satisfied()) {
+            release_keep_alive();
+            cb(Result<void, Error>::Ok());
+          } else {
+            enqueue_retry();
+          }
+        } else {
+          if (!retry_on_error(r.error()) || *attempt >= max_attempts) {
+            release_keep_alive();
+            cb(std::move(r));
+          } else {
+            enqueue_retry();
+          }
+        }
+      };
+
+      *do_attempt = [attempt, max_attempts, cb, self_ptr, handle_result,
+                     release_keep_alive]() mutable {
         if (*attempt >= max_attempts) {
+          release_keep_alive();
           cb(Result<void, Error>::Err(Error{3, "Polling attempts exhausted"}));
           return;
         }
         (*attempt)++;
-        self_ptr->clone().run([attempt, max_attempts, cb, self_ptr, interval,
-                                ioc_ptr, satisfied, retry_on_error,
-                                weak_attempt](IOResult r) mutable {
-          if (r.is_ok()) {
-            if (satisfied()) {
-              cb(Result<void, Error>::Ok());
-            } else {
-              auto timer = std::make_shared<boost::asio::steady_timer>(*ioc_ptr);
-              timer->expires_after(interval);
-              timer->async_wait([attempt, max_attempts, cb, self_ptr, interval,
-                                 ioc_ptr, satisfied, retry_on_error,
-                                 weak_attempt, timer = timer](
-                                    const boost::system::error_code& ec) mutable {
-                if (ec) {
-                  cb(Result<void, Error>::Err(
-                      Error{1, std::string{"Timer error: "} + ec.message()}));
-                } else {
-                  if (auto attempt_fn = weak_attempt.lock()) {
-                    (*attempt_fn)();
-                  }
-                }
-              });
-            }
-          } else {
-            if (!retry_on_error(r.error()) || *attempt >= max_attempts) {
-              cb(std::move(r));
-            } else {
-              auto timer = std::make_shared<boost::asio::steady_timer>(*ioc_ptr);
-              timer->expires_after(interval);
-              timer->async_wait([attempt, max_attempts, cb, self_ptr, interval,
-                                 ioc_ptr, satisfied, retry_on_error,
-                                 weak_attempt, timer = timer](
-                                    const boost::system::error_code& ec) mutable {
-                if (ec) {
-                  cb(Result<void, Error>::Err(
-                      Error{1, std::string{"Timer error: "} + ec.message()}));
-                } else {
-                  if (auto attempt_fn = weak_attempt.lock()) {
-                    (*attempt_fn)();
-                  }
-                }
-              });
-            }
-          }
-        });
+        self_ptr->clone().run(handle_result);
       };
 
       (*do_attempt)();
@@ -875,60 +893,66 @@ class IO<void> {
                         auto cb) mutable {
       auto attempt = std::make_shared<int>(0);
       auto do_attempt = std::make_shared<std::function<void()>>();
+      auto keep_alive_holder =
+          std::make_shared<std::shared_ptr<std::function<void()>>>(do_attempt);
       std::weak_ptr<std::function<void()>> weak_attempt = do_attempt;
 
-      *do_attempt = [attempt, max_attempts, cb, self_ptr, interval, ex,
-                     satisfied, retry_on_error, weak_attempt]() mutable {
+      auto release_keep_alive =
+          [keep_alive_holder]() mutable {
+            if (keep_alive_holder && *keep_alive_holder) {
+              keep_alive_holder->reset();
+            }
+          };
+
+      auto handle_result = [attempt, max_attempts, cb, self_ptr, interval, ex,
+                            satisfied, retry_on_error, weak_attempt,
+                            keep_alive_holder, release_keep_alive](IOResult r) mutable {
+        auto enqueue_retry = [&]() {
+          auto keep_alive_copy = *keep_alive_holder;
+          auto timer = std::make_shared<boost::asio::steady_timer>(ex);
+          timer->expires_after(interval);
+          timer->async_wait([weak_attempt, keep_alive_holder, keep_alive_copy,
+                             timer, cb, release_keep_alive](
+                                const boost::system::error_code& ec) mutable {
+            if (ec) {
+              release_keep_alive();
+              cb(Result<void, Error>::Err(
+                  Error{1, std::string{"Timer error: "} + ec.message()}));
+            } else {
+              (void)keep_alive_copy;
+              if (auto attempt_fn = weak_attempt.lock()) {
+                (*attempt_fn)();
+              }
+            }
+          });
+        };
+
+        if (r.is_ok()) {
+          if (satisfied()) {
+            release_keep_alive();
+            cb(Result<void, Error>::Ok());
+          } else {
+            enqueue_retry();
+          }
+        } else {
+          if (!retry_on_error(r.error()) || *attempt >= max_attempts) {
+            release_keep_alive();
+            cb(std::move(r));
+          } else {
+            enqueue_retry();
+          }
+        }
+      };
+
+      *do_attempt = [attempt, max_attempts, cb, self_ptr, handle_result,
+                     release_keep_alive]() mutable {
         if (*attempt >= max_attempts) {
+          release_keep_alive();
           cb(Result<void, Error>::Err(Error{3, "Polling attempts exhausted"}));
           return;
         }
         (*attempt)++;
-        self_ptr->clone().run([attempt, max_attempts, cb, self_ptr, interval,
-                                ex, satisfied, retry_on_error,
-                                weak_attempt](IOResult r) mutable {
-          if (r.is_ok()) {
-            if (satisfied()) {
-              cb(Result<void, Error>::Ok());
-            } else {
-              auto timer = std::make_shared<boost::asio::steady_timer>(ex);
-              timer->expires_after(interval);
-              timer->async_wait([attempt, max_attempts, cb, self_ptr, interval,
-                                 ex, satisfied, retry_on_error,
-                                 weak_attempt, timer = timer](
-                                    const boost::system::error_code& ec) mutable {
-                if (ec) {
-                  cb(Result<void, Error>::Err(
-                      Error{1, std::string{"Timer error: "} + ec.message()}));
-                } else {
-                  if (auto attempt_fn = weak_attempt.lock()) {
-                    (*attempt_fn)();
-                  }
-                }
-              });
-            }
-          } else {
-            if (!retry_on_error(r.error()) || *attempt >= max_attempts) {
-              cb(std::move(r));
-            } else {
-              auto timer = std::make_shared<boost::asio::steady_timer>(ex);
-              timer->expires_after(interval);
-              timer->async_wait([attempt, max_attempts, cb, self_ptr, interval,
-                                 ex, satisfied, retry_on_error,
-                                 weak_attempt, timer = timer](
-                                    const boost::system::error_code& ec) mutable {
-                if (ec) {
-                  cb(Result<void, Error>::Err(
-                      Error{1, std::string{"Timer error: "} + ec.message()}));
-                } else {
-                  if (auto attempt_fn = weak_attempt.lock()) {
-                    (*attempt_fn)();
-                  }
-                }
-              });
-            }
-          }
-        });
+        self_ptr->clone().run(handle_result);
       };
 
       (*do_attempt)();
