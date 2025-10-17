@@ -5,7 +5,7 @@
 #include <boost/core/detail/string_view.hpp>
 #include <boost/json/serializer.hpp>
 #include <exception>
-#include <format>
+#include <fmt/format.h>
 #include <memory>
 #include <optional>
 #include <string>
@@ -75,7 +75,7 @@ struct HttpExchange {
     std::string target =
         url.encoded_path().empty() ? "/" : std::string(url.encoded_path());
     if (!url.encoded_query().empty()) {
-      target = std::format("{}?{}", target, std::string(url.encoded_query()));
+      target = fmt::format("{}?{}", target, std::string(url.encoded_query()));
     }
     request.target(target);
     std::string host_header = std::string(url.host());
@@ -118,7 +118,7 @@ struct HttpExchange {
     int status = static_cast<int>(response->result_int());
     if (status < 200 || status >= 300) {
       return MyVoidResult::Err(
-          Error{status, std::format("Expected 2xx response, got {}", status)});
+          Error{status, fmt::format("Expected 2xx response, got {}", status)});
     }
     return MyVoidResult::Ok();
   }
@@ -198,7 +198,7 @@ struct HttpExchange {
       } else {
         first = false;
       }
-      result += std::format("{}={}", key, value);
+      result += fmt::format("{}={}", key, value);
     }
     return result;
   }
@@ -356,7 +356,7 @@ struct HttpExchange {
             << "Response body preview: " << preview;
         Error err{
             JSON_ERR_DECODE,
-            std::format("Failed to decode/parse JSON (low-level): {}", e.what())};
+            fmt::format("Failed to decode/parse JSON (low-level): {}", e.what())};
         err.response_status = static_cast<int>(response->result_int());
         err.params["response_body_preview"] = std::move(preview);
         return MyResult<json::value>::Err(std::move(err));
@@ -482,7 +482,7 @@ auto http_request_io(HttpClientManager& pool, int verbose = 0) {
         // Set up an HTTP GET request message
         std::string target = ex->url.path().empty() ? "/" : ex->url.path();
         if (!ex->url.query().empty()) {
-          target = std::format("{}?{}", target,
+          target = fmt::format("{}?{}", target,
                                std::string(ex->url.encoded_query()));
         }
         ex->request.target(target);

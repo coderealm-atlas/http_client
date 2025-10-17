@@ -4,7 +4,7 @@
 #include <boost/json.hpp>
 #include <cstddef>
 #include <cstdint>
-#include <format>
+#include <fmt/format.h>
 #include <functional>
 #include <limits>
 #include <optional>
@@ -67,7 +67,7 @@ inline std::string error_to_string(const Error& e) {
   if (e.content_type == "application/json") {
     return json::serialize(json::value_from(e));
   } else {
-    return std::format("code: {}\nwhat: {}", e.code, e.what);
+    return fmt::format("code: {}\nwhat: {}", e.code, e.what);
   }
 }
 
@@ -79,7 +79,7 @@ inline std::string error_to_response(const Error& e) {
       ErrorResponse resp{e};
       return json::serialize(json::value_from(resp));
     } else {
-      return std::format("code: {}\nwhat: {}", e.code, e.what);
+      return fmt::format("code: {}\nwhat: {}", e.code, e.what);
     }
   }
 }

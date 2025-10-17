@@ -14,6 +14,7 @@
 #include <boost/url.hpp>
 #include <chrono>
 #include <filesystem>
+#include <fmt/format.h>
 #include <optional>
 
 #include "base64.h"
@@ -176,7 +177,7 @@ class session {
     if (port.empty()) {
       port = default_port_;
     }
-    std::string url = std::format("{}:{}", urlv.host(), port);
+    std::string url = fmt::format("{}:{}", urlv.host(), port);
     proxy_req_.emplace(http::verb::connect, url, 11);
     // Host header for CONNECT should be host:port
     proxy_req_->set(http::field::host, url);
@@ -185,7 +186,7 @@ class session {
       std::string auth =
           proxy_setting_->username + ":" + proxy_setting_->password;
       proxy_req_->set(http::field::proxy_authorization,
-                      std::format("Basic {}", base64_encode(auth)));
+                      fmt::format("Basic {}", base64_encode(auth)));
     }
 
     proxy_stream_->expires_after(this->op_timeout());

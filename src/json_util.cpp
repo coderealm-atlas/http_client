@@ -7,7 +7,7 @@
 #include <charconv>
 #include <cstdint>
 #include <cstdlib>  // for std::getenv
-#include <format>
+#include <fmt/format.h>
 #include <iostream>
 #include <string>
 
@@ -25,7 +25,7 @@ MyResult<json::object> consume_object_at(json::value&& val,
   }
   return MyResult<json::object>::Err(
       {.code = 1,
-       .what = std::format("Expect object but not an object. body: {}",
+       .what = fmt::format("Expect object but not an object. body: {}",
                            json::serialize(val))});
 }
 
@@ -41,7 +41,7 @@ MyResult<std::reference_wrapper<const json::object>> reference_object_at(
   }
   return MyResult<std::reference_wrapper<const json::object>>::Err(
       {.code = 1,
-       .what = std::format("Expect object but not an object. body: {}",
+       .what = fmt::format("Expect object but not an object. body: {}",
                            json::serialize(val))});
 }
 
@@ -53,7 +53,7 @@ MyResult<json::value> consume_value_at(json::value&& val, std::string_view k1) {
   }
   return MyResult<json::value>::Err(
       {.code = 1,
-       .what = std::format("Expect object but not an object. body: {}",
+       .what = fmt::format("Expect object but not an object. body: {}",
                            json::serialize(val))});
 }
 MyResult<std::reference_wrapper<const json::value>> reference_value_at(
@@ -66,7 +66,7 @@ MyResult<std::reference_wrapper<const json::value>> reference_value_at(
   }
   return MyResult<std::reference_wrapper<const json::value>>::Err(
       {.code = 1,
-       .what = std::format("Expect object but not an object. body: {}",
+       .what = fmt::format("Expect object but not an object. body: {}",
                            json::serialize(val))});
 }
 
@@ -355,7 +355,7 @@ std::string prettyPrint(const boost::json::value& val, int level) {
       return std::to_string(val.get_double());
 
     case kind::string:
-      return std::format(R"("{}")", json::value_to<std::string>(val));
+      return fmt::format(R"("{}")", json::value_to<std::string>(val));
 
     case kind::array: {
       const array& arr = val.get_array();
