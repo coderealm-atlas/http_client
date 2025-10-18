@@ -59,16 +59,15 @@ using ApiResponseResult = monad::MyResult<ApiDataResponse<T>>;
 template <class T>
 ApiResponseResult<T> tag_invoke(
     const json::value_to_tag<ApiResponseResult<T>>&, const json::value& jv) {
-  auto make_error = [&](int code, std::string_view msg) {
-    return ApiResponseResult<T>::Err(monad::Error{
-        .code = code,
-        .what = std::string(msg) + ", json: " + json::serialize(jv)});
+  auto make_result_error = [&](int code, std::string_view msg) {
+    return ApiResponseResult<T>::Err(monad::make_error(
+        code, std::string(msg) + ", json: " + json::serialize(jv)));
   };
 
   try {
     if (!jv.is_object()) {
-      return make_error(api_response_errors::invalid_schema,
-                        "ApiResponse is not an object");
+      return make_result_error(api_response_errors::invalid_schema,
+                               "ApiResponse is not an object");
     }
     const auto& obj = jv.as_object();
 
@@ -79,12 +78,13 @@ ApiResponseResult<T> tag_invoke(
       return ApiResponseResult<T>::Ok(json::value_to<ApiDataResponse<T>>(jv));
     }
 
-    return make_error(api_response_errors::invalid_schema,
-                      "Neither data nor error field found in ApiResponse");
+    return make_result_error(
+        api_response_errors::invalid_schema,
+        "Neither data nor error field found in ApiResponse");
   } catch (const std::exception& e) {
-    return make_error(api_response_errors::malformed,
-                      std::string("error in parsing ApiResponse: ") +
-                          e.what());
+    return make_result_error(
+        api_response_errors::malformed,
+        std::string("error in parsing ApiResponse: ") + e.what());
   }
 }
 

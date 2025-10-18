@@ -493,9 +493,14 @@ auto http_request_io(HttpClientManager& pool, int verbose = 0) {
         std::cerr << "Before request headers: " << request_copy.base()
                   << std::endl;
       }
-      pool.http_request<typename Req::body_type, typename Res::body_type>(
-          ex->url, std::move(request_copy),
-          [cb = std::move(cb), ex](std::optional<Res> resp, int err) mutable {
+    HttpClientRequestParams request_params;
+    request_params.body_file = ex->body_file;
+    request_params.follow_redirect = ex->follow_redirect;
+    request_params.no_modify_req = ex->no_modify_req;
+    request_params.timeout = ex->timeout;
+    pool.http_request<typename Req::body_type, typename Res::body_type>(
+      ex->url, std::move(request_copy),
+      [cb = std::move(cb), ex](std::optional<Res> resp, int err) mutable {
             if (err == 0 && resp.has_value()) {
               ex->response = std::move(resp);
               cb(monad::Result<ExchangePtr, monad::Error>::Ok(std::move(ex)));
@@ -506,12 +511,7 @@ auto http_request_io(HttpClientManager& pool, int verbose = 0) {
                   monad::Error{err, "http_request_io failed"}));
             }
           },
-          {
-              .body_file = ex->body_file,
-              .follow_redirect = ex->follow_redirect,
-              .no_modify_req = ex->no_modify_req,
-              .timeout = ex->timeout,
-          },
+          std::move(request_params),
           ex->proxy);
     });
   };

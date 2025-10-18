@@ -484,8 +484,8 @@ TEST(IOTest, NonCopyableThunkFailsToClone) {
       std::make_shared<NonCopyable>(std::move(nc));  // move once to heap
 
   auto io = IO<int>([nc_ptr](IO<int>::Callback cb) {
-              cb(IO<int>::IOResult::Err(
-                  {.code = 42, .what = "NonCopyable thunk failed"}));
+              cb(IO<int>::IOResult::Err(monad::make_error(
+                  42, "NonCopyable thunk failed")));
             }).retry_exponential(3, std::chrono::milliseconds(500), ioc);
 
   // ✅ this will compile and run, but now the lambda is copyable due to

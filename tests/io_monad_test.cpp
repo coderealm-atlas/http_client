@@ -306,7 +306,7 @@ TEST(ResultVoidTest, ErrResult) {
 }
 
 TEST(ResultVoidTest, CatchThenOnError) {
-  MyVoidResult result = MyVoidResult::Err({123, "Oops"});
+  MyVoidResult result = MyVoidResult::Err(Error{123, "Oops"});
   auto recovered = result.catch_then([](const Error& e) {
     EXPECT_EQ(e.code, 123);
     return MyVoidResult::Ok();
@@ -318,7 +318,7 @@ TEST(ResultVoidTest, CatchThenOnSuccessSkipsHandler) {
   MyVoidResult result = MyVoidResult::Ok();
   auto recovered = result.catch_then([](const Error&) {
     ADD_FAILURE() << "Should not be called on Ok";
-    return MyVoidResult::Err({999, "Unexpected"});
+  return MyVoidResult::Err(Error{999, "Unexpected"});
   });
   EXPECT_TRUE(recovered.is_ok());
 }
@@ -341,7 +341,7 @@ TEST(ResultVoidTest, AndThenChainsVoidToVoid) {
 }
 
 TEST(ResultVoidTest, AndThenPreservesErrorOnVoidResult) {
-  MyVoidResult result = MyVoidResult::Err({404, "Not Found"});
+  MyVoidResult result = MyVoidResult::Err(Error{404, "Not Found"});
   auto chained = result.and_then([]() {
     ADD_FAILURE() << "Should not be called on error";
     return MyResult<std::string>::Ok("Should not reach here");
@@ -558,7 +558,7 @@ TEST(IOTest, NonCopyableThunkFailsToClone) {
 
   auto io = IO<int>([nc_ptr](IO<int>::Callback cb) {
               cb(IO<int>::IOResult::Err(
-                  {.code = 42, .what = "NonCopyable thunk failed"}));
+          make_error(42, "NonCopyable thunk failed")));
             }).retry_exponential(3, std::chrono::milliseconds(500), ioc);
 
   // ✅ this will compile and run, but now the lambda is copyable due to
@@ -730,9 +730,9 @@ TEST(StopIndicatorTest, to_stop) {
 
 TEST(ApiHandlerTest, Download) {
   monad::IO<apihandler::DownloadFile>::pure(
-      apihandler::DownloadFile{.path = "file-not-exist",
-                               .content_type = "html/text",
-                               .filename = "hello"})
+      apihandler::DownloadFile{ "file-not-exist",
+                                "html/text",
+                                "hello"})
       .then(apihandler::http_response_gen_fn)
       .run([](auto r) {
         EXPECT_FALSE(r.is_ok());

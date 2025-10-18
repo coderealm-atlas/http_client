@@ -24,9 +24,9 @@ MyResult<json::object> consume_object_at(json::value&& val,
     }
   }
   return MyResult<json::object>::Err(
-      {.code = 1,
-       .what = fmt::format("Expect object but not an object. body: {}",
-                           json::serialize(val))});
+    monad::make_error(
+      1, fmt::format("Expect object but not an object. body: {}",
+              json::serialize(val))));
 }
 
 MyResult<std::reference_wrapper<const json::object>> reference_object_at(
@@ -40,9 +40,9 @@ MyResult<std::reference_wrapper<const json::object>> reference_object_at(
     }
   }
   return MyResult<std::reference_wrapper<const json::object>>::Err(
-      {.code = 1,
-       .what = fmt::format("Expect object but not an object. body: {}",
-                           json::serialize(val))});
+    monad::make_error(
+      1, fmt::format("Expect object but not an object. body: {}",
+              json::serialize(val))));
 }
 
 MyResult<json::value> consume_value_at(json::value&& val, std::string_view k1) {
@@ -52,9 +52,9 @@ MyResult<json::value> consume_value_at(json::value&& val, std::string_view k1) {
     }
   }
   return MyResult<json::value>::Err(
-      {.code = 1,
-       .what = fmt::format("Expect object but not an object. body: {}",
-                           json::serialize(val))});
+    monad::make_error(
+      1, fmt::format("Expect object but not an object. body: {}",
+              json::serialize(val))));
 }
 MyResult<std::reference_wrapper<const json::value>> reference_value_at(
     const json::value& val, std::string_view k1) {
@@ -65,33 +65,34 @@ MyResult<std::reference_wrapper<const json::value>> reference_value_at(
     }
   }
   return MyResult<std::reference_wrapper<const json::value>>::Err(
-      {.code = 1,
-       .what = fmt::format("Expect object but not an object. body: {}",
-                           json::serialize(val))});
+    monad::make_error(
+      1, fmt::format("Expect object but not an object. body: {}",
+              json::serialize(val))));
 }
 
 MyResult<json::object> expect_object_at(json::value&& val, std::string_view k1,
                                         std::string_view k2) {
   if (!val.is_object())
-    return MyResult<json::object>::Err({1, "Not an json::object at root"});
+  return MyResult<json::object>::Err(
+    monad::make_error(1, "Not an json::object at root"));
 
   auto& obj1 = val.as_object();
   auto it1 = obj1.find(k1);
   if (it1 == obj1.end())
-    return MyResult<json::object>::Err(
-        {2, "Key not found: " + std::string(k1)});
+  return MyResult<json::object>::Err(
+    monad::make_error(2, "Key not found: " + std::string(k1)));
   if (!it1->value().is_object())
-    return MyResult<json::object>::Err(
-        {3, "Expected json::object at key: " + std::string(k1)});
+  return MyResult<json::object>::Err(
+    monad::make_error(3, "Expected json::object at key: " + std::string(k1)));
 
   auto& obj2 = it1->value().as_object();
   auto it2 = obj2.find(k2);
   if (it2 == obj2.end())
-    return MyResult<json::object>::Err(
-        {4, "Key not found: " + std::string(k2)});
+  return MyResult<json::object>::Err(
+    monad::make_error(4, "Key not found: " + std::string(k2)));
   if (!it2->value().is_object())
-    return MyResult<json::object>::Err(
-        {5, "Expected json::object at key: " + std::string(k2)});
+  return MyResult<json::object>::Err(
+    monad::make_error(5, "Expected json::object at key: " + std::string(k2)));
 
   return MyResult<json::object>::Ok(std::move(it2->value().as_object()));
 }
@@ -100,34 +101,35 @@ MyResult<json::object> expect_object_at(json::value&& val, std::string_view k1,
                                         std::string_view k2,
                                         std::string_view k3) {
   if (!val.is_object())
-    return MyResult<json::object>::Err({1, "Not an json::object at root"});
+  return MyResult<json::object>::Err(
+    monad::make_error(1, "Not an json::object at root"));
 
   auto& obj1 = val.as_object();
   auto it1 = obj1.find(k1);
   if (it1 == obj1.end())
-    return MyResult<json::object>::Err(
-        {2, "Key not found: " + std::string(k1)});
+  return MyResult<json::object>::Err(
+    monad::make_error(2, "Key not found: " + std::string(k1)));
   if (!it1->value().is_object())
-    return MyResult<json::object>::Err(
-        {3, "Expected json::object at key: " + std::string(k1)});
+  return MyResult<json::object>::Err(
+    monad::make_error(3, "Expected json::object at key: " + std::string(k1)));
 
   auto& obj2 = it1->value().as_object();
   auto it2 = obj2.find(k2);
   if (it2 == obj2.end())
-    return MyResult<json::object>::Err(
-        {4, "Key not found: " + std::string(k2)});
+  return MyResult<json::object>::Err(
+    monad::make_error(4, "Key not found: " + std::string(k2)));
   if (!it2->value().is_object())
-    return MyResult<json::object>::Err(
-        {5, "Expected json::object at key: " + std::string(k2)});
+  return MyResult<json::object>::Err(
+    monad::make_error(5, "Expected json::object at key: " + std::string(k2)));
 
   auto& obj3 = it2->value().as_object();
   auto it3 = obj3.find(k3);
   if (it3 == obj3.end())
-    return MyResult<json::object>::Err(
-        {6, "Key not found: " + std::string(k3)});
+  return MyResult<json::object>::Err(
+    monad::make_error(6, "Key not found: " + std::string(k3)));
   if (!it3->value().is_object())
-    return MyResult<json::object>::Err(
-        {7, "Expected json::object at key: " + std::string(k3)});
+  return MyResult<json::object>::Err(
+    monad::make_error(7, "Expected json::object at key: " + std::string(k3)));
 
   return MyResult<json::object>::Ok(std::move(it3->value().as_object()));
 }
@@ -144,7 +146,7 @@ monad::MyVoidResult expect_true_at(const json::value& val,
     }
   }
   return monad::MyVoidResult::Err(
-      {1, "Expected true at key: " + std::string(k1)});
+    monad::make_error(1, "Expected true at key: " + std::string(k1)));
 }
 // Helper function to replace ${VARIABLE} or ${VARIABLE:-default} with the
 // environment variable

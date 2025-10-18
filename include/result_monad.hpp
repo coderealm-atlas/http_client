@@ -53,6 +53,21 @@ struct Error {
   }
 };
 
+inline Error make_error(int code, std::string what) {
+  Error err{};
+  err.code = code;
+  err.what = std::move(what);
+  return err;
+}
+
+inline Error make_error(int code, std::string what, std::string key) {
+  Error err{};
+  err.code = code;
+  err.what = std::move(what);
+  err.key = std::move(key);
+  return err;
+}
+
 struct ErrorResponse {
   Error error;
   friend void tag_invoke(const json::value_from_tag&, json::value& jv,
