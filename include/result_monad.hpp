@@ -96,13 +96,17 @@ struct err_t {};
 inline constexpr ok_t ok_in_place{};
 inline constexpr err_t err_in_place{};
 
-// Concept: type looks like Result<*, E>
+// SFINAE helper: type looks like Result<*, E>
+template <typename X, typename E, typename = void>
+struct is_result_with_error : std::false_type {};
+
 template <typename X, typename E>
-concept result_with_error = requires {
-  typename X::value_type;
-  typename X::error_type;
-  requires std::is_same_v<typename X::error_type, E>;
-};
+struct is_result_with_error<X, E, 
+    std::void_t<typename X::value_type, typename X::error_type>>
+    : std::is_same<typename X::error_type, E> {};
+
+template <typename X, typename E>
+constexpr bool result_with_error_v = is_result_with_error<X, E>::value;
 
 // Result<T,E>
 template <typename T, typename E>
@@ -192,7 +196,7 @@ class [[nodiscard]] Result {
   [[nodiscard]] auto and_then(
       F&& f) const& -> std::invoke_result_t<F, const T&> {
     using Ret = std::invoke_result_t<F, const T&>;
-    static_assert(result_with_error<Ret, E>,
+    static_assert(result_with_error_v<Ret, E>,
                   "and_then must return Result<U,E>");
     if (is_ok()) return std::invoke(std::forward<F>(f), value());
     return Ret::Err(error());
@@ -201,7 +205,7 @@ class [[nodiscard]] Result {
   template <typename F>
   [[nodiscard]] auto and_then(F&& f) && -> std::invoke_result_t<F, T&&> {
     using Ret = std::invoke_result_t<F, T&&>;
-    static_assert(result_with_error<Ret, E>,
+    static_assert(result_with_error_v<Ret, E>,
                   "and_then must return Result<U,E>");
     if (is_ok())
       return std::invoke(std::forward<F>(f),

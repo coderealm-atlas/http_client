@@ -1,6 +1,6 @@
 # Repository Guidelines
 
-This repository is a C++20 HTTP client built with CMake and vcpkg. Use the guidance below to navigate the codebase and contribute changes confidently and consistently.
+This repository is a C++17 HTTP client built with CMake and vcpkg. Use the guidance below to navigate the codebase and contribute changes confidently and consistently.
 
 ## Project Structure & Module Organization
 - `include/` — public headers (snake_case, `.hpp`).
@@ -21,7 +21,7 @@ Notes: Presets expect vcpkg; set `VCPKG_DIR` and optionally `CORES` for parallel
 
 ## Coding Style & Naming Conventions
 - Formatting: clang-format (Google-derived). Two-space indent, 80 col limit, sorted includes. Run: `clang-format -i <files>`.
-- Language: C++20 (`-std=c++20`).
+- Language: C++17 (`-std=c++17`).
 - Files: headers `.hpp` in `include/`; sources `.cpp` in `src/`.
 - Symbols: types/functions use lower_snake_case in this codebase; keep consistency with nearby code.
 

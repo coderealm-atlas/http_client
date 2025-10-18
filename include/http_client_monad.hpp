@@ -172,7 +172,8 @@ struct HttpExchange {
         // Trim leading spaces
         token.erase(0, token.find_first_not_of(" \t"));
 
-        if (token.starts_with(cookie_name + "=")) {
+        std::string prefix = cookie_name + "=";
+        if (token.size() >= prefix.size() && token.substr(0, prefix.size()) == prefix) {
           std::string value = token.substr(cookie_name.length() + 1);
 
           // Strip quotes if present

@@ -1,0 +1,96 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuites tests="61" failures="0" disabled="0" errors="0" time="6.677" timestamp="2025-10-18T05:51:04.225" name="AllTests">
+  <testsuite name="IOMonadTest" tests="21" failures="0" disabled="0" skipped="0" errors="0" time="0.004" timestamp="2025-10-18T05:51:04.225">
+    <testcase name="PureSuccess" file="/home/jianglibo/http_client/tests/io_monad_test.cpp" line="43" status="run" result="completed" time="0." timestamp="2025-10-18T05:51:04.225" classname="IOMonadTest" />
+    <testcase name="FailError" file="/home/jianglibo/http_client/tests/io_monad_test.cpp" line="50" status="run" result="completed" time="0." timestamp="2025-10-18T05:51:04.226" classname="IOMonadTest" />
+    <testcase name="MapSuccess" file="/home/jianglibo/http_client/tests/io_monad_test.cpp" line="57" status="run" result="completed" time="0." timestamp="2025-10-18T05:51:04.226" classname="IOMonadTest" />
+    <testcase name="MapThrows" file="/home/jianglibo/http_client/tests/io_monad_test.cpp" line="66" status="run" result="completed" time="0." timestamp="2025-10-18T05:51:04.226" classname="IOMonadTest" />
+    <testcase name="ThenSuccess" file="/home/jianglibo/http_client/tests/io_monad_test.cpp" line="75" status="run" result="completed" time="0." timestamp="2025-10-18T05:51:04.227" classname="IOMonadTest" />
+    <testcase name="CatchThenRecover" file="/home/jianglibo/http_client/tests/io_monad_test.cpp" line="84" status="run" result="completed" time="0." timestamp="2025-10-18T05:51:04.227" classname="IOMonadTest" />
+    <testcase name="VoidPureAndMap" file="/home/jianglibo/http_client/tests/io_monad_test.cpp" line="94" status="run" result="completed" time="0." timestamp="2025-10-18T05:51:04.227" classname="IOMonadTest" />
+    <testcase name="VoidThenChain" file="/home/jianglibo/http_client/tests/io_monad_test.cpp" line="100" status="run" result="completed" time="0." timestamp="2025-10-18T05:51:04.227" classname="IOMonadTest" />
+    <testcase name="VoidCatchThen" file="/home/jianglibo/http_client/tests/io_monad_test.cpp" line="106" status="run" result="completed" time="0." timestamp="2025-10-18T05:51:04.228" classname="IOMonadTest" />
+    <testcase name="NonCopyableSupport" file="/home/jianglibo/http_client/tests/io_monad_test.cpp" line="112" status="run" result="completed" time="0." timestamp="2025-10-18T05:51:04.228" classname="IOMonadTest" />
+    <testcase name="MapErrTransformsError" file="/home/jianglibo/http_client/tests/io_monad_test.cpp" line="121" status="run" result="completed" time="0." timestamp="2025-10-18T05:51:04.228" classname="IOMonadTest" />
+    <testcase name="MapErrDoesNothingOnSuccess" file="/home/jianglibo/http_client/tests/io_monad_test.cpp" line="132" status="run" result="completed" time="0." timestamp="2025-10-18T05:51:04.228" classname="IOMonadTest" />
+    <testcase name="FinallyCalledOnSuccess" file="/home/jianglibo/http_client/tests/io_monad_test.cpp" line="144" status="run" result="completed" time="0." timestamp="2025-10-18T05:51:04.228" classname="IOMonadTest" />
+    <testcase name="FinallyCalledOnError" file="/home/jianglibo/http_client/tests/io_monad_test.cpp" line="157" status="run" result="completed" time="0." timestamp="2025-10-18T05:51:04.228" classname="IOMonadTest" />
+    <testcase name="VoidMapErrWorks" file="/home/jianglibo/http_client/tests/io_monad_test.cpp" line="170" status="run" result="completed" time="0." timestamp="2025-10-18T05:51:04.229" classname="IOMonadTest" />
+    <testcase name="VoidFinallyAlwaysCalled" file="/home/jianglibo/http_client/tests/io_monad_test.cpp" line="180" status="run" result="completed" time="0." timestamp="2025-10-18T05:51:04.229" classname="IOMonadTest" />
+    <testcase name="FromResultValueOk" file="/home/jianglibo/http_client/tests/io_monad_test.cpp" line="190" status="run" result="completed" time="0." timestamp="2025-10-18T05:51:04.229" classname="IOMonadTest" />
+    <testcase name="FromResultValueErr" file="/home/jianglibo/http_client/tests/io_monad_test.cpp" line="198" status="run" result="completed" time="0." timestamp="2025-10-18T05:51:04.229" classname="IOMonadTest" />
+    <testcase name="FromResultVoidOk" file="/home/jianglibo/http_client/tests/io_monad_test.cpp" line="208" status="run" result="completed" time="0." timestamp="2025-10-18T05:51:04.229" classname="IOMonadTest" />
+    <testcase name="FromResultVoidErr" file="/home/jianglibo/http_client/tests/io_monad_test.cpp" line="215" status="run" result="completed" time="0." timestamp="2025-10-18T05:51:04.230" classname="IOMonadTest" />
+    <testcase name="NonCopyableCapture" file="/home/jianglibo/http_client/tests/io_monad_test.cpp" line="745" status="run" result="completed" time="0." timestamp="2025-10-18T05:51:04.230" classname="IOMonadTest" />
+  </testsuite>
+  <testsuite name="ResultTest" tests="8" failures="0" disabled="0" skipped="0" errors="0" time="0.001" timestamp="2025-10-18T05:51:04.230">
+    <testcase name="OkConstructionAndAccess" file="/home/jianglibo/http_client/tests/io_monad_test.cpp" line="229" status="run" result="completed" time="0." timestamp="2025-10-18T05:51:04.230" classname="ResultTest" />
+    <testcase name="ErrConstructionAndAccess" file="/home/jianglibo/http_client/tests/io_monad_test.cpp" line="236" status="run" result="completed" time="0." timestamp="2025-10-18T05:51:04.230" classname="ResultTest" />
+    <testcase name="MapTransformsValue" file="/home/jianglibo/http_client/tests/io_monad_test.cpp" line="245" status="run" result="completed" time="0." timestamp="2025-10-18T05:51:04.230" classname="ResultTest" />
+    <testcase name="MapPreservesError" file="/home/jianglibo/http_client/tests/io_monad_test.cpp" line="252" status="run" result="completed" time="0." timestamp="2025-10-18T05:51:04.230" classname="ResultTest" />
+    <testcase name="AndThenChainsOk" file="/home/jianglibo/http_client/tests/io_monad_test.cpp" line="260" status="run" result="completed" time="0." timestamp="2025-10-18T05:51:04.230" classname="ResultTest" />
+    <testcase name="AndThenPreservesError" file="/home/jianglibo/http_client/tests/io_monad_test.cpp" line="269" status="run" result="completed" time="0." timestamp="2025-10-18T05:51:04.231" classname="ResultTest" />
+    <testcase name="CatchThenRecoversFromError" file="/home/jianglibo/http_client/tests/io_monad_test.cpp" line="278" status="run" result="completed" time="0." timestamp="2025-10-18T05:51:04.231" classname="ResultTest" />
+    <testcase name="CatchThenPassesThroughOk" file="/home/jianglibo/http_client/tests/io_monad_test.cpp" line="286" status="run" result="completed" time="0." timestamp="2025-10-18T05:51:04.232" classname="ResultTest" />
+  </testsuite>
+  <testsuite name="ResultVoidTest" tests="8" failures="0" disabled="0" skipped="0" errors="0" time="0." timestamp="2025-10-18T05:51:04.232">
+    <testcase name="OkResult" file="/home/jianglibo/http_client/tests/io_monad_test.cpp" line="294" status="run" result="completed" time="0." timestamp="2025-10-18T05:51:04.232" classname="ResultVoidTest" />
+    <testcase name="ErrResult" file="/home/jianglibo/http_client/tests/io_monad_test.cpp" line="300" status="run" result="completed" time="0." timestamp="2025-10-18T05:51:04.232" classname="ResultVoidTest" />
+    <testcase name="CatchThenOnError" file="/home/jianglibo/http_client/tests/io_monad_test.cpp" line="308" status="run" result="completed" time="0." timestamp="2025-10-18T05:51:04.232" classname="ResultVoidTest" />
+    <testcase name="CatchThenOnSuccessSkipsHandler" file="/home/jianglibo/http_client/tests/io_monad_test.cpp" line="317" status="run" result="completed" time="0." timestamp="2025-10-18T05:51:04.232" classname="ResultVoidTest" />
+    <testcase name="AndThenChainsVoidToValue" file="/home/jianglibo/http_client/tests/io_monad_test.cpp" line="326" status="run" result="completed" time="0." timestamp="2025-10-18T05:51:04.232" classname="ResultVoidTest" />
+    <testcase name="AndThenChainsVoidToVoid" file="/home/jianglibo/http_client/tests/io_monad_test.cpp" line="335" status="run" result="completed" time="0." timestamp="2025-10-18T05:51:04.232" classname="ResultVoidTest" />
+    <testcase name="AndThenPreservesErrorOnVoidResult" file="/home/jianglibo/http_client/tests/io_monad_test.cpp" line="343" status="run" result="completed" time="0." timestamp="2025-10-18T05:51:04.232" classname="ResultVoidTest" />
+    <testcase name="AndThenMoveSemantics" file="/home/jianglibo/http_client/tests/io_monad_test.cpp" line="354" status="run" result="completed" time="0." timestamp="2025-10-18T05:51:04.232" classname="ResultVoidTest" />
+  </testsuite>
+  <testsuite name="JsonTest" tests="1" failures="0" disabled="0" skipped="0" errors="0" time="0." timestamp="2025-10-18T05:51:04.232">
+    <testcase name="expect_true" file="/home/jianglibo/http_client/tests/io_monad_test.cpp" line="363" status="run" result="completed" time="0." timestamp="2025-10-18T05:51:04.232" classname="JsonTest" />
+  </testsuite>
+  <testsuite name="DelayTest" tests="5" failures="0" disabled="0" skipped="0" errors="0" time="5.106" timestamp="2025-10-18T05:51:04.233">
+    <testcase name="delay_for" file="/home/jianglibo/http_client/tests/io_monad_test.cpp" line="377" status="run" result="completed" time="0.1" timestamp="2025-10-18T05:51:04.233" classname="DelayTest" />
+    <testcase name="delay_then" file="/home/jianglibo/http_client/tests/io_monad_test.cpp" line="391" status="run" result="completed" time="2.002" timestamp="2025-10-18T05:51:04.333" classname="DelayTest" />
+    <testcase name="retry" file="/home/jianglibo/http_client/tests/io_monad_test.cpp" line="406" status="run" result="completed" time="1.501" timestamp="2025-10-18T05:51:06.336" classname="DelayTest" />
+    <testcase name="retry_if" file="/home/jianglibo/http_client/tests/io_monad_test.cpp" line="422" status="run" result="completed" time="1.501" timestamp="2025-10-18T05:51:07.837" classname="DelayTest" />
+    <testcase name="retry_if_1" file="/home/jianglibo/http_client/tests/io_monad_test.cpp" line="446" status="run" result="completed" time="0." timestamp="2025-10-18T05:51:09.338" classname="DelayTest" />
+  </testsuite>
+  <testsuite name="PollIfTest" tests="3" failures="0" disabled="0" skipped="0" errors="0" time="0.052" timestamp="2025-10-18T05:51:09.339">
+    <testcase name="ValueSatisfiedEventually" file="/home/jianglibo/http_client/tests/io_monad_test.cpp" line="470" status="run" result="completed" time="0.03" timestamp="2025-10-18T05:51:09.339" classname="PollIfTest" />
+    <testcase name="AttemptsExhausted" file="/home/jianglibo/http_client/tests/io_monad_test.cpp" line="489" status="run" result="completed" time="0.015" timestamp="2025-10-18T05:51:09.370" classname="PollIfTest" />
+    <testcase name="ErrorThenSuccessWithRetryPredicate" file="/home/jianglibo/http_client/tests/io_monad_test.cpp" line="503" status="run" result="completed" time="0.005" timestamp="2025-10-18T05:51:09.386" classname="PollIfTest" />
+  </testsuite>
+  <testsuite name="PollIfVoidTest" tests="1" failures="0" disabled="0" skipped="0" errors="0" time="0.005" timestamp="2025-10-18T05:51:09.391">
+    <testcase name="SatisfiedAfterActions" file="/home/jianglibo/http_client/tests/io_monad_test.cpp" line="526" status="run" result="completed" time="0.005" timestamp="2025-10-18T05:51:09.391" classname="PollIfVoidTest" />
+  </testsuite>
+  <testsuite name="IOTest" tests="3" failures="0" disabled="0" skipped="0" errors="0" time="1.501" timestamp="2025-10-18T05:51:09.397">
+    <testcase name="NonCopyableThunkFailsToClone" file="/home/jianglibo/http_client/tests/io_monad_test.cpp" line="543" status="run" result="completed" time="1.5" timestamp="2025-10-18T05:51:09.397" classname="IOTest" />
+    <testcase name="finally_then" file="/home/jianglibo/http_client/tests/io_monad_test.cpp" line="588" status="run" result="completed" time="0." timestamp="2025-10-18T05:51:10.898" classname="IOTest" />
+    <testcase name="current_dir" file="/home/jianglibo/http_client/tests/io_monad_test.cpp" line="799" status="run" result="completed" time="0." timestamp="2025-10-18T05:51:10.898" classname="IOTest" />
+  </testsuite>
+  <testsuite name="IoutputTest" tests="2" failures="0" disabled="0" skipped="0" errors="0" time="0." timestamp="2025-10-18T05:51:10.899">
+    <testcase name="outputConsole" file="/home/jianglibo/http_client/tests/io_monad_test.cpp" line="605" status="run" result="completed" time="0." timestamp="2025-10-18T05:51:10.899" classname="IoutputTest" />
+    <testcase name="output" file="/home/jianglibo/http_client/tests/io_monad_test.cpp" line="613" status="run" result="completed" time="0." timestamp="2025-10-18T05:51:10.899" classname="IoutputTest" />
+  </testsuite>
+  <testsuite name="InflightTest" tests="1" failures="0" disabled="0" skipped="0" errors="0" time="0." timestamp="2025-10-18T05:51:10.900">
+    <testcase name="to_zero" file="/home/jianglibo/http_client/tests/io_monad_test.cpp" line="713" status="run" result="completed" time="0." timestamp="2025-10-18T05:51:10.900" classname="InflightTest" />
+  </testsuite>
+  <testsuite name="StopIndicatorTest" tests="1" failures="0" disabled="0" skipped="0" errors="0" time="0." timestamp="2025-10-18T05:51:10.900">
+    <testcase name="to_stop" file="/home/jianglibo/http_client/tests/io_monad_test.cpp" line="722" status="run" result="completed" time="0." timestamp="2025-10-18T05:51:10.900" classname="StopIndicatorTest" />
+  </testsuite>
+  <testsuite name="ApiHandlerTest" tests="1" failures="0" disabled="0" skipped="0" errors="0" time="0." timestamp="2025-10-18T05:51:10.900">
+    <testcase name="Download" file="/home/jianglibo/http_client/tests/io_monad_test.cpp" line="731" status="run" result="completed" time="0." timestamp="2025-10-18T05:51:10.900" classname="ApiHandlerTest" />
+  </testsuite>
+  <testsuite name="ErrorDataTest" tests="1" failures="0" disabled="0" skipped="0" errors="0" time="0." timestamp="2025-10-18T05:51:10.901">
+    <testcase name="with_data_content" file="/home/jianglibo/http_client/tests/io_monad_test.cpp" line="759" status="run" result="completed" time="0." timestamp="2025-10-18T05:51:10.901" classname="ErrorDataTest" />
+  </testsuite>
+  <testsuite name="ApiResponseTest" tests="1" failures="0" disabled="0" skipped="0" errors="0" time="0." timestamp="2025-10-18T05:51:10.902">
+    <testcase name="deleted_construct" file="/home/jianglibo/http_client/tests/io_monad_test.cpp" line="784" status="run" result="completed" time="0." timestamp="2025-10-18T05:51:10.902" classname="ApiResponseTest" />
+  </testsuite>
+  <testsuite name="IOTypeAliasTest" tests="3" failures="0" disabled="0" skipped="0" errors="0" time="0." timestamp="2025-10-18T05:51:10.902">
+    <testcase name="CommonTypeAliases" file="/home/jianglibo/http_client/tests/io_monad_test.cpp" line="804" status="run" result="completed" time="0." timestamp="2025-10-18T05:51:10.902" classname="IOTypeAliasTest" />
+    <testcase name="ContainerAndJsonTypes" file="/home/jianglibo/http_client/tests/io_monad_test.cpp" line="851" status="run" result="completed" time="0." timestamp="2025-10-18T05:51:10.902" classname="IOTypeAliasTest" />
+    <testcase name="OptionalTypes" file="/home/jianglibo/http_client/tests/io_monad_test.cpp" line="880" status="run" result="completed" time="0." timestamp="2025-10-18T05:51:10.902" classname="IOTypeAliasTest" />
+  </testsuite>
+  <testsuite name="IOVoidTest" tests="1" failures="0" disabled="0" skipped="0" errors="0" time="0." timestamp="2025-10-18T05:51:10.903">
+    <testcase name="MapToProducesValues" file="/home/jianglibo/http_client/tests/io_monad_test.cpp" line="905" status="run" result="completed" time="0." timestamp="2025-10-18T05:51:10.903" classname="IOVoidTest" />
+  </testsuite>
+</testsuites>

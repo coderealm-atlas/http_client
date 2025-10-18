@@ -88,44 +88,41 @@ struct KeepAliveServer {
   }
 
   void handle_session(std::shared_ptr<tcp::socket> sock) {
-    auto buffer = std::make_shared<boost::beast::flat_buffer>();
-    auto req = std::make_shared<http::request<http::string_body>>();
-    auto self = sock;
-    auto read_once = std::make_shared<std::function<void()>>();
-    *read_once = [this, self, buffer, req, read_once]() {
-      http::async_read(
-          *self, *buffer, *req,
-          [this, self, buffer, req, read_once](boost::system::error_code ec,
-                                               std::size_t) {
-            if (ec) {
-              return;  // connection closed or error
-            }
-            // Build response with a stable Conn-Id header based on socket
-            // pointer
-            auto res = std::make_shared<http::response<http::string_body>>(
-                http::status::ok, 11);
-            res->set(http::field::server, "local-keep-alive");
-            res->set(http::field::content_type, "text/plain");
-            res->keep_alive(true);
-            res->body() = "ok";
-            res->prepare_payload();
-            res->set("X-Conn-Id", fmt::format("{}", (const void*)self.get()));
-
-            http::async_write(*self, *res,
-                              [this, self, res, buffer, req, read_once](
-                                  boost::system::error_code ec, std::size_t) {
-                                if (ec) {
-                                  return;
-                                }
-                                // Clear and wait for another request on the
-                                // same connection
-                                req->clear();
-                                buffer->consume(buffer->size());
-                                (*read_once)();
-                              });
-          });
+    struct Session : public std::enable_shared_from_this<Session> {
+      std::shared_ptr<tcp::socket> sock;
+      boost::beast::flat_buffer buffer;
+      http::request<http::string_body> req;
+      Session(std::shared_ptr<tcp::socket> s) : sock(std::move(s)) {}
+      void start() { do_read(); }
+      void do_read() {
+        auto self = shared_from_this();
+        http::async_read(*sock, buffer, req,
+                         [self](boost::system::error_code ec, std::size_t) {
+                           if (ec) return;  // connection closed or error
+                           // Build and send response
+                           auto res = std::make_shared<http::response<http::string_body>>(
+                               http::status::ok, 11);
+                           res->set(http::field::server, "local-keep-alive");
+                           res->set(http::field::content_type, "text/plain");
+                           res->keep_alive(true);
+                           res->body() = "ok";
+                           res->prepare_payload();
+                           res->set("X-Conn-Id",
+                                    fmt::format("{}", (const void*)self->sock.get()));
+                           http::async_write(*self->sock, *res,
+                                             [self, res](boost::system::error_code ec, std::size_t) {
+                                               if (ec) return;
+                                               // clear for next read
+                                               self->req.clear();
+                                               self->buffer.consume(self->buffer.size());
+                                               // schedule next read on same connection
+                                               self->do_read();
+                                             });
+                         });
+      }
     };
-    (*read_once)();
+    auto s = std::make_shared<Session>(sock);
+    s->start();
   }
 };
 }  // namespace
@@ -404,6 +401,8 @@ TEST(HttpClientTest, PooledReuseLocal) {
 
   std::optional<std::string> conn_id_1;
   std::optional<std::string> conn_id_2;
+  std::optional<int> code1;
+  std::optional<int> code2;
   misc::ThreadNotifier notifier{};
 
   // First request (pooled)
@@ -414,15 +413,24 @@ TEST(HttpClientTest, PooledReuseLocal) {
     http_client_->http_request_pooled<http::string_body, http::string_body>(
         urls::url_view(url), std::move(req),
         [&](std::optional<http::response<http::string_body>>&& res, int code) {
-          ASSERT_EQ(code, 0);
-          ASSERT_TRUE(res.has_value());
-          ASSERT_TRUE(res->find("X-Conn-Id") != res->end());
-          conn_id_1 = std::string(
-              res->base()["X-Conn-Id"]);  // to_string_view -> std::string
+          // Avoid ASSERTs inside async callbacks (they may abort the
+          // callback without notifying). Store results and always notify so
+          // the main test thread can assert afterwards.
+          code1 = code;
+          if (res && res->find("X-Conn-Id") != res->end()) {
+            conn_id_1 = std::string(res->base()["X-Conn-Id"]);
+          } else {
+            conn_id_1.reset();
+          }
           notifier.notify();
         });
   }
   notifier.waitForNotification();
+
+  // Assert results on the main thread to avoid hanging when assertions fail
+  ASSERT_TRUE(code1.has_value());
+  ASSERT_EQ(*code1, 0);
+  ASSERT_TRUE(conn_id_1.has_value());
 
   // Second request (should reuse the same TCP connection)
   {
@@ -432,14 +440,20 @@ TEST(HttpClientTest, PooledReuseLocal) {
     http_client_->http_request_pooled<http::string_body, http::string_body>(
         urls::url_view(url), std::move(req),
         [&](std::optional<http::response<http::string_body>>&& res, int code) {
-          ASSERT_EQ(code, 0);
-          ASSERT_TRUE(res.has_value());
-          ASSERT_TRUE(res->find("X-Conn-Id") != res->end());
-          conn_id_2 = std::string(res->base()["X-Conn-Id"]);
+          code2 = code;
+          if (res && res->find("X-Conn-Id") != res->end()) {
+            conn_id_2 = std::string(res->base()["X-Conn-Id"]);
+          } else {
+            conn_id_2.reset();
+          }
           notifier.notify();
         });
   }
   notifier.waitForNotification();
+
+  ASSERT_TRUE(code2.has_value());
+  ASSERT_EQ(*code2, 0);
+  ASSERT_TRUE(conn_id_2.has_value());
 
   ASSERT_TRUE(conn_id_1.has_value());
   ASSERT_TRUE(conn_id_2.has_value());

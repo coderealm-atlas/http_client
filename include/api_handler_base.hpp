@@ -28,9 +28,9 @@ struct ApiDataResponse {
 
   // Constructors
   template <typename U = T>
-  requires(!std::same_as<U, std::vector<T>> &&
-           !std::same_as<U, resp::ListResult<T>>)
-  ApiDataResponse(T&& val, const std::string& content_type = "application/json")
+  ApiDataResponse(T&& val, const std::string& content_type = "application/json",
+      typename std::enable_if<!std::is_same_v<U, std::vector<T>> &&
+                             !std::is_same_v<U, resp::ListResult<T>>, int>::type = 0)
       : data(std::move(val)), content_type(content_type) {}
   // Deleted constructor for lvalue reference to prevent copy
   ApiDataResponse(const T& val,

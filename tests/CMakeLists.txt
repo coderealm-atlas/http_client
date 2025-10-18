@@ -185,6 +185,39 @@ add_test(
     COMMAND ${T_NAME}
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 
+# ----------------------------retry_poll_regression_test.cpp------------------------------
+set(T_NAME retry_poll_regression_test)
+add_executable(${T_NAME}
+    retry_poll_regression_test.cpp
+)
+target_include_directories(${T_NAME}
+    PUBLIC ${CMAKE_SOURCE_DIR}/include
+    PRIVATE ./include
+)
+target_link_libraries(
+    ${T_NAME}
+    PRIVATE GTest::gtest GTest::gtest_main GTest::gmock GTest::gmock_main
+    PUBLIC 
+        Boost::asio
+        Boost::beast
+        Boost::url
+        Boost::uuid
+        Boost::json
+        Boost::process
+        Boost::iostreams
+        date::date
+        OpenSSL::SSL
+        OpenSSL::Crypto
+        ZLIB::ZLIB
+        fmt::fmt-header-only
+        Boost::log
+        Boost::log_setup
+)
+add_test(
+    NAME ${T_NAME}
+    COMMAND ${T_NAME}
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+
 #
 
 # ----------------------------urls_test.cpp------------------------------
@@ -225,6 +258,7 @@ target_link_libraries(
     PRIVATE GTest::gtest GTest::gtest_main GTest::gmock GTest::gmock_main
     PUBLIC
         Boost::json
+        fmt::fmt-header-only
 )
 
 add_test(

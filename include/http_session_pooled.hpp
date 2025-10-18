@@ -74,6 +74,13 @@ class http_session_pooled
 
  private:
   void finish(std::optional<response_t> res, int code) {
+    if (code != 0) {
+      // Diagnostic: surface non-zero internal finish codes to stderr so tests
+      // can show why the pooled session failed (mapping: 1=acquire,2=write,
+      // 3=read header,4=proxy response,5=ssl upgrade,6=handshake,7=write,
+      // 8=read)
+      std::cerr << "[debug] http_session_pooled::finish code=" << code << std::endl;
+    }
     // Release connection based on keep-alive and error
     bool reusable = res.has_value() && res->keep_alive();
     if (!reusable && conn_) conn_->close();

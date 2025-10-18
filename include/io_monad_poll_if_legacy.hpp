@@ -105,8 +105,8 @@ class IO {
 	}
 
 	template <typename F>
-	requires(!std::is_void_v<T>)
-	auto then(F&& f) const {
+	auto then(F&& f) const -> typename std::enable_if<!std::is_void_v<T>, 
+			std::invoke_result_t<F, T>>::type {
 		using NextIO = std::invoke_result_t<F, T>;
 		static_assert(is_io_v<NextIO>, "then() must return IO<U>");
 		return NextIO([prev = *this, fn = std::forward<F>(f)](
