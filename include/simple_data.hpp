@@ -15,6 +15,7 @@
 #include <sstream>
 #include <vector>
 
+#include "env_file_parser.hpp"
 #include "result_monad.hpp"
 
 namespace fs = std::filesystem;
@@ -60,6 +61,7 @@ struct ConfigSources {
   // application.{profile}.json.
   std::optional<json::value> application_json;
   std::map<std::string, std::string> cli_overrides_;
+  std::map<std::string, std::string> env_overrides_;
 
   ConfigSources(std::vector<fs::path> paths, std::vector<std::string> profiles,
                 std::map<std::string, std::string> cli_overrides = {})
@@ -158,6 +160,10 @@ struct ConfigSources {
     return cli_overrides_;
   }
 
+  const std::map<std::string, std::string>& env_overrides() const {
+    return env_overrides_;
+  }
+
   void set_cli_override(std::string key, std::string value) {
     cli_overrides_[std::move(key)] = std::move(value);
   }
@@ -165,6 +171,12 @@ struct ConfigSources {
   void merge_cli_overrides(std::map<std::string, std::string> overrides) {
     for (auto& [k, v] : overrides) {
       cli_overrides_[std::move(k)] = std::move(v);
+    }
+  }
+
+  void merge_env_overrides(std::map<std::string, std::string> overrides) {
+    for (auto& [k, v] : overrides) {
+      env_overrides_[std::move(k)] = std::move(v);
     }
   }
 
@@ -267,119 +279,6 @@ struct ConfigSources {
         });
   }
 };
-
-namespace {
-using EnvParseResult = monad::MyResult<std::map<std::string, std::string>>;
-using monad::Error;
-inline EnvParseResult parse_envrc(const fs::path& envrc) {
-  auto ltrim = [](std::string& s) {
-    size_t i = 0;
-    while (i < s.size() && (s[i] == ' ' || s[i] == '\t')) ++i;
-    if (i) s.erase(0, i);
-  };
-  auto rtrim = [](std::string& s) {
-    size_t i = s.size();
-    while (i > 0 && (s[i - 1] == ' ' || s[i - 1] == '\t')) --i;
-    if (i < s.size()) s.erase(i);
-  };
-  auto trim = [&](std::string& s) {
-    rtrim(s);
-    ltrim(s);
-  };
-
-  std::string line;
-  std::map<std::string, std::string> env;
-  std::ifstream ifs(envrc);
-  if (!ifs) {
-    std::string error_msg = "Failed to open envrc file: " + envrc.generic_string();
-    return EnvParseResult::Err(Error{5019, std::move(error_msg)});
-  }
-  while (std::getline(ifs, line)) {
-    // Normalize line endings and trim leading/trailing whitespace
-    if (!line.empty() && line.back() == '\r') line.pop_back();
-    ltrim(line);
-    if (line.empty() || line[0] == '#') continue;
-
-    // Optionally consume leading 'export' keyword (export, export\t,
-    // export<spaces>)
-    if (line.rfind("export", 0) == 0) {
-      // Ensure next char is whitespace or end
-      if (line.size() == 6 ||
-          line.size() > 6 && (line[6] == ' ' || line[6] == '\t')) {
-        line.erase(0, 6);
-        ltrim(line);
-      }
-    }
-
-    if (line.empty() || line[0] == '#') continue;
-
-    // Find key and '='
-    // Key is up to '=' or whitespace
-    size_t i = 0;
-    // Parse key characters (allow [A-Za-z_][A-Za-z0-9_]*), tolerate others but
-    // trim
-    size_t key_start = 0;
-    while (i < line.size() && line[i] != '=' && line[i] != ' ' &&
-           line[i] != '\t')
-      ++i;
-    std::string key = line.substr(key_start, i - key_start);
-    rtrim(key);
-    if (key.empty()) continue;
-
-    // Skip whitespace before '=' (allow "KEY = value")
-    size_t j = i;
-    while (j < line.size() && (line[j] == ' ' || line[j] == '\t')) ++j;
-    if (j >= line.size() || line[j] != '=') {
-      // No '=' present; treat as empty assignment only if the rest is
-      // comment/whitespace Otherwise, skip line
-      continue;
-    }
-    ++j;  // skip '='
-    // Support '+=' by ignoring '+' before '=' (KEY+=value) — treat same as '='
-    // Already handled since we looked for '=' and consumed it; if '+' existed
-    // before, the key would contain '+'; sanitize it
-    if (!key.empty() && key.back() == '+') key.pop_back();
-
-    // Skip whitespace before value
-    while (j < line.size() && (line[j] == ' ' || line[j] == '\t')) ++j;
-    std::string value;
-    if (j < line.size()) {
-      if (line[j] == '"' || line[j] == '\'') {
-        // Quoted value; read until matching quote with simple escape handling
-        char quote = line[j++];
-        bool escape = false;
-        for (; j < line.size(); ++j) {
-          char c = line[j];
-          if (escape) {
-            value.push_back(c);
-            escape = false;
-          } else if (c == '\\') {
-            escape = true;
-          } else if (c == quote) {
-            ++j;  // consume closing quote
-            break;
-          } else {
-            value.push_back(c);
-          }
-        }
-        // Ignore trailing content after closing quote except allow inline
-        // comment that starts with #
-      } else {
-        // Unquoted: read until unquoted '#'
-        size_t k = j;
-        while (k < line.size() && line[k] != '#') ++k;
-        value = line.substr(j, k - j);
-        trim(value);
-      }
-    } else {
-      value.clear();
-    }
-
-    env[key] = value;
-  }
-  return EnvParseResult::Ok(env);
-}
-}  // namespace
 
 /*
  AppProperties — layered .properties loader with deterministic merge order
@@ -515,7 +414,7 @@ struct AppProperties {
     // Process ordered paths_
     for (const auto& path : ordered_paths) {
       if (fs::exists(path) && fs::is_regular_file(path)) {
-        auto r = parse_envrc(path).and_then(
+        auto r = parse_env_file(path).and_then(
             [this](const std::map<std::string, std::string>& env) {
               for (const auto& [key, value] : env) {
                 properties[key] = value;
@@ -530,6 +429,10 @@ struct AppProperties {
           processed_files.push_back(path);
         }
       }
+    }
+
+    for (const auto& [key, value] : config_sources.env_overrides()) {
+      properties[key] = value;
     }
 
     for (const auto& [key, value] : config_sources.cli_overrides()) {
