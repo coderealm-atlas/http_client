@@ -81,26 +81,73 @@ struct ErrorResponse {
 inline std::string error_to_string(const Error& e) {
   if (e.content_type == "application/json") {
     return json::serialize(json::value_from(e));
-  } else {
-    return fmt::format("code: {}\nwhat: {}", e.code, e.what);
   }
+  std::string extra;
+  if (!e.key.empty()) {
+    extra += fmt::format("\nkey: {}", e.key);
+  }
+  extra += fmt::format("\nstatus: {}", e.response_status);
+  if (!e.params.empty()) {
+    extra += fmt::format("\nparams: {}", json::serialize(e.params));
+  }
+  if (e.alternative_body.has_value()) {
+    extra += fmt::format("\nalt_body: {}",
+                         json::serialize(*e.alternative_body));
+  }
+  return fmt::format("code: {}\nwhat: {}{}", e.code, e.what, extra);
 }
 
 inline std::string error_to_response(const Error& e) {
   if (e.alternative_body.has_value()) {
     return json::serialize(e.alternative_body.value());
-  } else {
-    if (e.content_type == "application/json") {
-      ErrorResponse resp{e};
-      return json::serialize(json::value_from(resp));
-    } else {
-      return fmt::format("code: {}\nwhat: {}", e.code, e.what);
-    }
   }
+  if (e.content_type == "application/json") {
+    ErrorResponse resp{e};
+    return json::serialize(json::value_from(resp));
+  }
+  std::string extra;
+  if (!e.key.empty()) {
+    extra += fmt::format("\nkey: {}", e.key);
+  }
+  extra += fmt::format("\nstatus: {}", e.response_status);
+  if (!e.params.empty()) {
+    extra += fmt::format("\nparams: {}", json::serialize(e.params));
+  }
+  return fmt::format("code: {}\nwhat: {}{}", e.code, e.what, extra);
 }
 
 inline std::ostream& operator<<(std::ostream& os, const Error& e) {
-  return os << "[Error " << e.code << "] " << e.what;
+  os << "[Error " << e.code << "] " << e.what;
+  if (!e.key.empty() || e.response_status || !e.params.empty()) {
+    os << " (";
+    bool first = true;
+    if (!e.key.empty()) {
+      os << "key=" << e.key;
+      first = false;
+    }
+    if (e.response_status != 0) {
+      if (!first) {
+        os << ", ";
+      }
+      os << "status=" << e.response_status;
+      first = false;
+    }
+    if (!e.params.empty()) {
+      if (!first) {
+        os << ", ";
+      }
+      os << "params=" << json::serialize(e.params);
+      first = false;
+    }
+    if (e.alternative_body.has_value()) {
+      if (!first) {
+        os << ", ";
+      }
+      os << "alt_body=" << json::serialize(*e.alternative_body);
+    }
+    os << ")";
+  }
+  return os;
 }
 
 inline static const Error JUST_AN_ERROR = {std::numeric_limits<int>::min(), ""};
