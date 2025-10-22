@@ -204,6 +204,10 @@ struct HttpExchange {
     return result;
   }
 
+  // Parses the full JSON response body into `T`.
+  // Use this when the server returns the structure you need at the top level,
+  // e.g. `{ "cursor": "...", "signals": [...] }` → struct with those fields.
+  // For `{"data": {...}}` wrappers prefer parseJsonDataResponse.
   template <typename T>
   auto parseJsonResponse() -> MyResult<std::decay_t<T>> {
     using ValueType = std::decay_t<T>;
@@ -238,6 +242,10 @@ struct HttpExchange {
         });
   }
 
+  // Parses the JSON response body and extracts the `data` member before
+  // converting to `T`. Intended for APIs that wrap payloads as
+  // `{ "data": {...} }`. If the desired structure lives at the top level, use
+  // parseJsonResponse instead.
   template <typename T>
   auto parseJsonDataResponse() -> MyResult<std::decay_t<T>> {
     using ValueType = std::decay_t<T>;
@@ -297,6 +305,10 @@ struct HttpExchange {
         });
   }
 
+  // Parses the full JSON body into a `MyResult<...>` payload. This variant is
+  // reserved for endpoints that already encode success/error in the JSON
+  // document, typically produced by ApiHandler helpers. For regular structs use
+  // parseJsonResponse / parseJsonDataResponse.
   template <typename ResultT>
   auto parseJsonResponseResult() -> std::decay_t<ResultT> {
     using Requested = std::decay_t<ResultT>;
