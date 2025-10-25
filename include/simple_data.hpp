@@ -78,6 +78,34 @@ struct ConfigSources {
           "ConfigSources should only be instantiated once.");
 #endif
     }
+    // Filter out non-existing or non-directory paths early; warn for visibility
+    {
+      std::vector<fs::path> filtered;
+      filtered.reserve(paths_.size());
+      for (const auto& p : paths_) {
+        std::error_code ec;
+        bool exists = fs::exists(p, ec);
+        if (ec) {
+          std::cerr << "ConfigSources: path check error for '" << p
+                    << "': " << ec.message() << std::endl;
+          continue;
+        }
+        if (!exists) {
+          std::cerr << "ConfigSources: skipping missing config dir '" << p
+                    << "'" << std::endl;
+          continue;
+        }
+        if (!fs::is_directory(p, ec)) {
+          std::cerr << "ConfigSources: skipping non-directory path '" << p
+                    << "'" << (ec ? std::string{" ("} + ec.message() + ")" : std::string{})
+                    << std::endl;
+          continue;
+        }
+        filtered.push_back(p);
+      }
+      paths_.swap(filtered);
+    }
+
     if (paths_.empty()) {
       throw std::runtime_error(
           "ConfigSources paths_ cannot be empty, forget to bind the "
