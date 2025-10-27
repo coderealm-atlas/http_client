@@ -5,6 +5,7 @@
 
 #include "ioc_manager_config_provider.hpp"
 #include "log_stream.hpp"
+#include "openssl_thread_cleanup.hpp"
 
 namespace asio = boost::asio;
 
@@ -43,6 +44,7 @@ class IoContextManager : public IIoContextManager {
     threads_.reserve(threads_num_);
     for (int i = 0; i < threads_num_; ++i) {
       threads_.emplace_back([this, i] {
+        OpenSslThreadCleanup openssl_guard;
         try {
           asio::io_context::count_type ct = ioc_.run();
           output_.debug() << "io_context run count: " << ct << std::endl;
@@ -80,6 +82,9 @@ class IoContextManager : public IIoContextManager {
     }
     threads_.clear();
   }
-  ~IoContextManager() { stop(); }
+  ~IoContextManager() {
+    stop();
+    OpenSslThreadCleanup cleanup_guard;
+  }
 };
 }  // namespace cjj365
