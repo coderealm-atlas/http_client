@@ -39,13 +39,13 @@ class IoContextManager : public IIoContextManager {
       throw std::runtime_error(
           "Only one instance of IoContextManager is allowed.");
     }
-    output_.info() << "[IoContextManager] constructing name=" << name_ << " threads_num=" << threads_num_ << std::endl;
+    output_.debug() << "[IoContextManager] constructing name=" << name_ << " threads_num=" << threads_num_ << std::endl;
     threads_.reserve(threads_num_);
     for (int i = 0; i < threads_num_; ++i) {
       threads_.emplace_back([this, i] {
         try {
           asio::io_context::count_type ct = ioc_.run();
-          output_.info() << "io_context run count: " << ct << std::endl;
+          output_.debug() << "io_context run count: " << ct << std::endl;
         } catch (const std::exception& e) {
           output_.error() << "io_context run exception: " << e.what();
         }
