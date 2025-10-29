@@ -12,6 +12,8 @@ namespace ssl = asio::ssl;
 
 namespace cjj365 {
 
+void load_platform_root_certificates(ssl::context& ctx);
+
 // DI-friendly SSL context configured from IHttpclientConfigProvider.
 class ClientSSLContext {
  public:
@@ -38,6 +40,8 @@ class ClientSSLContext {
 
     ctx_.set_verify_mode(cfg.get_insecure_skip_verify() ? ssl::verify_none
                                                         : ssl::verify_peer);
+
+  load_platform_root_certificates(ctx_);
   }
 
   ssl::context& context() noexcept { return ctx_; }
