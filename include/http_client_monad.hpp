@@ -517,10 +517,11 @@ auto http_request_io(HttpClientManager& pool, int verbose = 0) {
               ex->response = std::move(resp);
               cb(monad::Result<ExchangePtr, monad::Error>::Ok(std::move(ex)));
             } else {
+              const auto url_view = ex->url.buffer();
               BOOST_LOG_SEV(ex->lg, trivial::error)
-                  << "http_request_io failed with error num: " << err;
+                  << "http_request_io failed with error num: " << err << ", url:  " << url_view;
               cb(monad::Result<ExchangePtr, monad::Error>::Err(
-                  monad::Error{err, "http_request_io failed"}));
+                  monad::Error{err, fmt::format("http_request_io failed, url: {}", url_view)}));
             }
           },
           std::move(request_params),
