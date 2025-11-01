@@ -183,6 +183,23 @@ TEST(CollectResultIOTest, ReturnsAllResults) {
       });
 }
 
+TEST(CollectResultIOTest, HandlesVoidIOs) {
+  bool done = false;
+  collect_result_io<void>(
+      {IO<void>::pure(), IO<void>::fail(Error{17, "oops"}), IO<void>::pure()})
+      .run([&](IO<std::vector<Result<void, Error>>>::IOResult result) {
+        ASSERT_TRUE(result.is_ok());
+        const auto& values = result.value();
+        ASSERT_EQ(values.size(), 3u);
+        EXPECT_TRUE(values[0].is_ok());
+        EXPECT_TRUE(values[1].is_err());
+        EXPECT_EQ(values[1].error().code, 17);
+        EXPECT_TRUE(values[2].is_ok());
+        done = true;
+      });
+  EXPECT_TRUE(done);
+}
+
 TEST(ZipIOTest, AggregatesTupleValues) {
   bool done = false;
   zip_io(IO<int>::pure(7), IO<std::string>::pure("zip"), IO<double>::pure(1.5))
