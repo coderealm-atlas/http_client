@@ -13,8 +13,9 @@
 
 namespace cjj365 {
 
-void load_platform_root_certificates(ssl::context& ctx) {
 #ifdef _WIN32
+
+void load_platform_root_certificates(ssl::context& ctx) {
   HCERTSTORE root_store = CertOpenSystemStoreW(static_cast<HCRYPTPROV_LEGACY>(0), L"ROOT");
   if (!root_store) {
     return;
@@ -43,9 +44,8 @@ void load_platform_root_certificates(ssl::context& ctx) {
   }
 
   CertCloseStore(root_store, 0);
-#else
-  (void)ctx;
-#endif
 }
+
+#endif  // _WIN32
 
 }  // namespace cjj365

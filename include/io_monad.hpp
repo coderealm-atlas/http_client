@@ -1126,6 +1126,8 @@ class IO<void> {
 
 // Free helpers to combine IOs
 
+// Pairs a sequence of IOs with heterogeneous return types and produces a tuple.
+// Execution short-circuits on error and values keep the left-to-right ordering.
 inline IO<std::tuple<>> zip_io() { return IO<std::tuple<>>::pure({}); }
 
 template <typename T1, typename... Ts>
@@ -1164,11 +1166,12 @@ inline IO<std::tuple<>> zip_io_skip_void() {
 }
 
 template <typename T1, typename... Ts>
+// Variant of zip_io that omits void slots from the returned tuple.
 inline IO<io_filter_void_types_t<T1, Ts...>> zip_io_skip_void(IO<T1> first,
                                                               IO<Ts>... rest) {
   if constexpr (sizeof...(Ts) == 0) {
     if constexpr (std::is_same_v<T1, void>) {
-      return std::move(first).map([] { return std::tuple<>(); });
+      return std::move(first).map_to([] { return std::tuple<>(); });
     } else {
       return std::move(first).map(
           [](T1 v1) { return std::make_tuple(std::move(v1)); });
@@ -1189,6 +1192,12 @@ inline IO<io_filter_void_types_t<T1, Ts...>> zip_io_skip_void(IO<T1> first,
   }
 }
 
+// Runs a batch of IO<T> sequentially and combines their results in order.
+// Execution stops as soon as an IO returns an Error, propagating that error.
+// Example:
+//   auto io = collect_io<int>({IO<int>::pure(1), IO<int>::pure(2)});
+//   io.run([](auto result) { /* handle vector<int> on success */ });
+// On success the returned vector preserves the original ordering.
 template <typename T>
 inline IO<std::vector<T>> collect_io(std::vector<IO<T>> items) {
   return IO<std::vector<T>>([items = std::make_shared<std::vector<IO<T>>>(
@@ -1196,21 +1205,27 @@ inline IO<std::vector<T>> collect_io(std::vector<IO<T>> items) {
     auto out = std::make_shared<std::vector<T>>();
     out->reserve(items->size());
     auto idx = std::make_shared<size_t>(0);
-
     auto step = std::make_shared<std::function<void()>>();
-    *step = [=]() mutable {
+    std::weak_ptr<std::function<void()>> weak_step = step;
+
+    *step = [items, out, idx, cb, weak_step]() mutable {
       if (*idx >= items->size()) {
         cb(Result<std::vector<T>, Error>::Ok(std::move(*out)));
         return;
       }
+
       auto current = (*items)[*idx].clone();
-      current.run([=](Result<T, Error> r) mutable {
+      current.run([items, out, idx, cb, weak_step](Result<T, Error> r) mutable {
         if (r.is_err()) {
           cb(Result<std::vector<T>, Error>::Err(r.error()));
-        } else {
-          out->push_back(std::move(r).value());
-          ++(*idx);
-          (*step)();
+          return;
+        }
+
+        out->push_back(std::move(r).value());
+        ++(*idx);
+
+        if (auto step_fn = weak_step.lock()) {
+          (*step_fn)();
         }
       });
     };
@@ -1222,6 +1237,47 @@ inline IO<std::vector<T>> collect_io(std::vector<IO<T>> items) {
 template <typename T>
 inline IO<std::vector<T>> collect_io(std::initializer_list<IO<T>> items) {
   return collect_io(std::vector<IO<T>>(items));
+}
+
+// Runs IO<T> sequentially and returns the raw Result stream (success/failure).
+// Useful when the caller needs to inspect which entries failed instead of
+// short-circuiting on the first error.
+template <typename T>
+inline IO<std::vector<Result<T, Error>>> collect_result_io(
+    std::vector<IO<T>> items) {
+  return IO<std::vector<Result<T, Error>>>(
+      [items = std::make_shared<std::vector<IO<T>>>(std::move(items))](auto cb) mutable {
+        auto out = std::make_shared<std::vector<Result<T, Error>>>();
+        out->reserve(items->size());
+        auto idx = std::make_shared<size_t>(0);
+        auto step = std::make_shared<std::function<void()>>();
+        std::weak_ptr<std::function<void()>> weak_step = step;
+
+        *step = [items, out, idx, cb, weak_step]() mutable {
+          if (*idx >= items->size()) {
+            cb(Result<std::vector<Result<T, Error>>, Error>::Ok(std::move(*out)));
+            return;
+          }
+
+          auto current = (*items)[*idx].clone();
+          current.run([items, out, idx, cb, weak_step](Result<T, Error> r) mutable {
+            out->push_back(std::move(r));
+            ++(*idx);
+
+            if (auto step_fn = weak_step.lock()) {
+              (*step_fn)();
+            }
+          });
+        };
+
+        (*step)();
+      });
+}
+
+template <typename T>
+inline IO<std::vector<Result<T, Error>>> collect_result_io(
+    std::initializer_list<IO<T>> items) {
+  return collect_result_io(std::vector<IO<T>>(items));
 }
 
 inline IO<void> all_ok_io(std::vector<IO<void>> items) {

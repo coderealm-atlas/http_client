@@ -8,6 +8,7 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <iostream>
 
 #include "beast_connection_pool.hpp"
 

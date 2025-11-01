@@ -14,6 +14,10 @@ namespace cjj365 {
 
 void load_platform_root_certificates(ssl::context& ctx);
 
+#ifndef _WIN32
+inline void load_platform_root_certificates(ssl::context&) {}
+#endif
+
 // DI-friendly SSL context configured from IHttpclientConfigProvider.
 class ClientSSLContext {
  public:

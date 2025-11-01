@@ -18,7 +18,9 @@
 #include <i_output.hpp>
 #include <stdexcept>
 #include <string>
+#include <tuple>
 #include <variant>
+#include <vector>
 
 #include "api_handler_base.hpp"
 #include "i_output.hpp"
@@ -116,6 +118,103 @@ TEST(IOMonadTest, NonCopyableSupport) {
         ASSERT_TRUE(result.is_ok());
         EXPECT_EQ(result.value(), 15);
       });
+}
+
+TEST(CollectIOTest, CollectsSequentialValues) {
+  std::vector<int> visit_order;
+  auto make_io = [&](int v) {
+    return IO<int>::pure(v).map([&, v](int value) {
+      visit_order.push_back(v);
+      return value * 10;
+    });
+  };
+
+  bool completed = false;
+  collect_io<int>({make_io(1), make_io(2), make_io(3)})
+      .run([&](IO<std::vector<int>>::IOResult result) {
+        ASSERT_TRUE(result.is_ok());
+        EXPECT_EQ(result.value(), std::vector<int>({10, 20, 30}));
+        completed = true;
+      });
+
+  EXPECT_TRUE(completed);
+  EXPECT_EQ(visit_order, std::vector<int>({1, 2, 3}));
+}
+
+TEST(CollectIOTest, StopsOnFirstError) {
+  int map_calls = 0;
+  bool final_ran = false;
+
+  auto first = IO<int>::pure(5).map([&](int v) {
+    ++map_calls;
+    return v;
+  });
+
+  auto failing = IO<int>::fail(Error{77, "boom"});
+
+  auto third = IO<int>::pure(9).map([&](int v) {
+    final_ran = true;
+    return v;
+  });
+
+  collect_io<int>({first, failing, third})
+      .run([&](IO<std::vector<int>>::IOResult result) {
+        ASSERT_TRUE(result.is_err());
+        EXPECT_EQ(result.error().code, 77);
+      });
+
+  EXPECT_EQ(map_calls, 1);
+  EXPECT_FALSE(final_ran);
+}
+
+TEST(CollectResultIOTest, ReturnsAllResults) {
+  collect_result_io<int>(
+      {IO<int>::pure(1), IO<int>::fail(Error{9, "fail"}), IO<int>::pure(3)})
+      .run([](IO<std::vector<Result<int, Error>>>::IOResult result) {
+        ASSERT_TRUE(result.is_ok());
+        const auto& values = result.value();
+        ASSERT_EQ(values.size(), 3u);
+        EXPECT_TRUE(values[0].is_ok());
+        EXPECT_EQ(values[0].value(), 1);
+        EXPECT_TRUE(values[1].is_err());
+        EXPECT_EQ(values[1].error().code, 9);
+        EXPECT_TRUE(values[2].is_ok());
+        EXPECT_EQ(values[2].value(), 3);
+      });
+}
+
+TEST(ZipIOTest, AggregatesTupleValues) {
+  bool done = false;
+  zip_io(IO<int>::pure(7), IO<std::string>::pure("zip"), IO<double>::pure(1.5))
+      .run([&](IO<std::tuple<int, std::string, double>>::IOResult result) {
+        ASSERT_TRUE(result.is_ok());
+        const auto& value = result.value();
+        EXPECT_EQ(std::get<0>(value), 7);
+        EXPECT_EQ(std::get<1>(value), "zip");
+        EXPECT_DOUBLE_EQ(std::get<2>(value), 1.5);
+        done = true;
+      });
+  EXPECT_TRUE(done);
+}
+
+TEST(ZipIOTest, PropagatesErrors) {
+  zip_io(IO<int>::pure(1), IO<int>::fail(Error{42, "tuple failure"}),
+         IO<int>::pure(3))
+      .run([](IO<std::tuple<int, int, int>>::IOResult result) {
+        ASSERT_TRUE(result.is_err());
+        EXPECT_EQ(result.error().code, 42);
+      });
+}
+
+TEST(ZipIOSkipVoidTest, DropsVoidEntries) {
+  bool done = false;
+  zip_io_skip_void(IO<void>::pure(), IO<int>::pure(9), IO<void>::pure())
+      .run([&](IO<std::tuple<int>>::IOResult result) {
+        ASSERT_TRUE(result.is_ok());
+        EXPECT_EQ(std::get<0>(result.value()), 9);
+        done = true;
+      });
+  EXPECT_TRUE(done);
 }
 
 TEST(IOMonadTest, MapErrTransformsError) {
