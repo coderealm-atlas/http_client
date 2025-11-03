@@ -1215,7 +1215,13 @@ inline IO<std::vector<T>> collect_io(std::vector<IO<T>> items) {
       }
 
       auto current = (*items)[*idx].clone();
-      current.run([items, out, idx, cb, weak_step](Result<T, Error> r) mutable {
+  // Hold shared ownership so the recursive step survives until callback completes
+  auto step_keepalive = weak_step.lock();
+      current.run([
+                    items, out, idx, cb, weak_step,
+                    step_keepalive = std::move(step_keepalive)
+                  ](Result<T, Error> r) mutable {
+        (void)step_keepalive;  // ensure recursive step stays alive until callback fires
         if (r.is_err()) {
           cb(Result<std::vector<T>, Error>::Err(r.error()));
           return;
@@ -1260,7 +1266,13 @@ inline IO<std::vector<Result<T, Error>>> collect_result_io(
           }
 
           auto current = (*items)[*idx].clone();
-          current.run([items, out, idx, cb, weak_step](Result<T, Error> r) mutable {
+          // Hold shared ownership so the recursive step survives until callback completes
+          auto step_keepalive = weak_step.lock();
+          current.run([
+                        items, out, idx, cb, weak_step,
+                        step_keepalive = std::move(step_keepalive)
+                      ](Result<T, Error> r) mutable {
+            (void)step_keepalive;  // ensure recursive step stays alive until callback fires
             out->push_back(std::move(r));
             ++(*idx);
 
