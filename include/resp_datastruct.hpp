@@ -6,9 +6,9 @@ namespace json = boost::json;
 namespace resp {
 
 struct DataMeta {
-  int64_t total;
-  size_t offset;
-  size_t limit;
+  int64_t total = 0;
+  size_t offset = 0;
+  size_t limit = 0;
 
   friend void tag_invoke(const json::value_from_tag&, json::value& jv,
                          const DataMeta& meta) {
