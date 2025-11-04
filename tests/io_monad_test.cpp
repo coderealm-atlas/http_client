@@ -2,6 +2,7 @@
 
 #include <gtest/gtest.h>  // Add this line
 
+#include <atomic>
 #include <boost/beast.hpp>  // IWYU pragma: keep
 #include <boost/intrusive/detail/algo_type.hpp>
 #include <boost/intrusive/detail/list_iterator.hpp>
@@ -12,6 +13,7 @@
 #include <boost/process/v2/detail/config.hpp>
 #include <boost/smart_ptr/intrusive_ref_counter.hpp>
 #include <boost/url/detail/config.hpp>
+#include <chrono>
 #include <cmath>
 #include <cstdlib>
 #include <filesystem>
@@ -181,6 +183,176 @@ TEST(CollectResultIOTest, ReturnsAllResults) {
         EXPECT_TRUE(values[2].is_ok());
         EXPECT_EQ(values[2].value(), 3);
       });
+}
+
+TEST(CollectIOParallelTest, CollectsValuesInOriginalOrder) {
+  boost::asio::io_context ioc;
+
+  auto make_io = [&](int value, std::chrono::milliseconds delay) {
+    return IO<int>([&, value, delay](IO<int>::Callback cb) {
+      auto timer = std::make_shared<boost::asio::steady_timer>(ioc);
+      timer->expires_after(delay);
+      timer->async_wait(
+          [timer, cb, value](const boost::system::error_code& ec) mutable {
+            if (ec) {
+              cb(Result<int, Error>::Err(Error{
+                  ec.value(), std::string{"timer error: "} + ec.message()}));
+              return;
+            }
+            cb(Result<int, Error>::Ok(value));
+          });
+    });
+  };
+
+  bool completed = false;
+  collect_io_parallel<int>({make_io(1, std::chrono::milliseconds(30)),
+                            make_io(2, std::chrono::milliseconds(10)),
+                            make_io(3, std::chrono::milliseconds(5))})
+      .run([&](IO<std::vector<int>>::IOResult result) {
+        ASSERT_TRUE(result.is_ok());
+        EXPECT_EQ(result.value(), std::vector<int>({1, 2, 3}));
+        completed = true;
+      });
+
+  ioc.run();
+  EXPECT_TRUE(completed);
+}
+
+TEST(CollectIOParallelTest, PropagatesFirstError) {
+  boost::asio::io_context ioc;
+
+  auto ok_io = [&](int value, std::chrono::milliseconds delay) {
+    return IO<int>([&, value, delay](IO<int>::Callback cb) {
+      auto timer = std::make_shared<boost::asio::steady_timer>(ioc);
+      timer->expires_after(delay);
+      timer->async_wait(
+          [timer, cb, value](const boost::system::error_code& ec) mutable {
+            if (ec) {
+              cb(Result<int, Error>::Err(Error{
+                  ec.value(), std::string{"timer error: "} + ec.message()}));
+              return;
+            }
+            cb(Result<int, Error>::Ok(value));
+          });
+    });
+  };
+
+  auto failing_io = [&](std::chrono::milliseconds delay) {
+    return IO<int>([&, delay](IO<int>::Callback cb) {
+      auto timer = std::make_shared<boost::asio::steady_timer>(ioc);
+      timer->expires_after(delay);
+      timer->async_wait([timer, cb](const boost::system::error_code&) mutable {
+        cb(Result<int, Error>::Err(Error{55, "parallel failure"}));
+      });
+    });
+  };
+
+  bool saw_error = false;
+  collect_io_parallel<int>({ok_io(1, std::chrono::milliseconds(20)),
+                            failing_io(std::chrono::milliseconds(5)),
+                            ok_io(3, std::chrono::milliseconds(10))})
+      .run([&](IO<std::vector<int>>::IOResult result) {
+        ASSERT_TRUE(result.is_err());
+        EXPECT_EQ(result.error().code, 55);
+        saw_error = true;
+      });
+
+  ioc.run();
+  EXPECT_TRUE(saw_error);
+}
+
+TEST(CollectIOParallelTest, RespectsConcurrencyLimit) {
+  boost::asio::io_context ioc;
+
+  std::atomic<int> active{0};
+  std::atomic<int> max_active{0};
+
+  auto make_io = [&](int value, std::chrono::milliseconds delay) {
+    return IO<int>([&, value, delay](IO<int>::Callback cb) {
+      int current = active.fetch_add(1, std::memory_order_acq_rel) + 1;
+      int observed = max_active.load(std::memory_order_relaxed);
+      while (current > observed &&
+             !max_active.compare_exchange_weak(observed, current,
+                                               std::memory_order_release,
+                                               std::memory_order_relaxed)) {
+      }
+
+      auto timer = std::make_shared<boost::asio::steady_timer>(ioc);
+      timer->expires_after(delay);
+      timer->async_wait([timer, cb, value,
+                         &active](const boost::system::error_code& ec) mutable {
+        active.fetch_sub(1, std::memory_order_acq_rel);
+        if (ec) {
+          cb(Result<int, Error>::Err(
+              Error{ec.value(), std::string{"timer error: "} + ec.message()}));
+          return;
+        }
+        cb(Result<int, Error>::Ok(value));
+      });
+    });
+  };
+
+  bool completed = false;
+  collect_io_parallel<int>({make_io(1, std::chrono::milliseconds(5)),
+                            make_io(2, std::chrono::milliseconds(10)),
+                            make_io(3, std::chrono::milliseconds(15)),
+                            make_io(4, std::chrono::milliseconds(20)),
+                            make_io(5, std::chrono::milliseconds(25))},
+                           2)
+      .run([&](IO<std::vector<int>>::IOResult result) {
+        ASSERT_TRUE(result.is_ok());
+        EXPECT_EQ(result.value(), std::vector<int>({1, 2, 3, 4, 5}));
+        completed = true;
+      });
+
+  ioc.run();
+  EXPECT_TRUE(completed);
+  EXPECT_LE(max_active.load(std::memory_order_relaxed), 2);
+}
+
+TEST(CollectResultParallelTest, ReturnsAllResults) {
+  boost::asio::io_context ioc;
+
+  auto make_io = [&](Result<int, Error> outcome,
+                     std::chrono::milliseconds delay) {
+    return IO<int>([&, outcome = std::move(outcome),
+                    delay](IO<int>::Callback cb) mutable {
+      auto stored = std::make_shared<Result<int, Error>>(std::move(outcome));
+      auto timer = std::make_shared<boost::asio::steady_timer>(ioc);
+      timer->expires_after(delay);
+      timer->async_wait(
+          [timer, cb, stored](const boost::system::error_code& ec) mutable {
+            if (ec) {
+              cb(Result<int, Error>::Err(Error{
+                  ec.value(), std::string{"timer error: "} + ec.message()}));
+              return;
+            }
+            cb(std::move(*stored));
+          });
+    });
+  };
+
+  bool completed = false;
+  collect_result_parallel<int>(
+      {make_io(Result<int, Error>::Ok(1), std::chrono::milliseconds(15)),
+       make_io(Result<int, Error>::Err(Error{90, "nope"}),
+               std::chrono::milliseconds(5)),
+       make_io(Result<int, Error>::Ok(3), std::chrono::milliseconds(10))})
+      .run([&](IO<std::vector<Result<int, Error>>>::IOResult result) {
+        ASSERT_TRUE(result.is_ok());
+        const auto& values = result.value();
+        ASSERT_EQ(values.size(), 3u);
+        EXPECT_TRUE(values[0].is_ok());
+        EXPECT_EQ(values[0].value(), 1);
+        EXPECT_TRUE(values[1].is_err());
+        EXPECT_EQ(values[1].error().code, 90);
+        EXPECT_TRUE(values[2].is_ok());
+        EXPECT_EQ(values[2].value(), 3);
+        completed = true;
+      });
+
+  ioc.run();
+  EXPECT_TRUE(completed);
 }
 
 TEST(CollectResultIOTest, HandlesVoidIOs) {
@@ -434,25 +606,21 @@ TEST(ResultVoidTest, CatchThenOnSuccessSkipsHandler) {
   MyVoidResult result = MyVoidResult::Ok();
   auto recovered = result.catch_then([](const Error&) {
     ADD_FAILURE() << "Should not be called on Ok";
-  return MyVoidResult::Err(Error{999, "Unexpected"});
+    return MyVoidResult::Err(Error{999, "Unexpected"});
   });
   EXPECT_TRUE(recovered.is_ok());
 }
 
 TEST(ResultVoidTest, AndThenChainsVoidToValue) {
   MyVoidResult result = MyVoidResult::Ok();
-  auto chained = result.and_then([]() {
-    return MyResult<int>::Ok(42);
-  });
+  auto chained = result.and_then([]() { return MyResult<int>::Ok(42); });
   EXPECT_TRUE(chained.is_ok());
   EXPECT_EQ(chained.value(), 42);
 }
 
 TEST(ResultVoidTest, AndThenChainsVoidToVoid) {
   MyVoidResult result = MyVoidResult::Ok();
-  auto chained = result.and_then([]() {
-    return MyVoidResult::Ok();
-  });
+  auto chained = result.and_then([]() { return MyVoidResult::Ok(); });
   EXPECT_TRUE(chained.is_ok());
 }
 
@@ -469,9 +637,8 @@ TEST(ResultVoidTest, AndThenPreservesErrorOnVoidResult) {
 
 TEST(ResultVoidTest, AndThenMoveSemantics) {
   MyVoidResult result = MyVoidResult::Ok();
-  auto chained = std::move(result).and_then([]() {
-    return MyResult<std::string>::Ok("Success");
-  });
+  auto chained = std::move(result).and_then(
+      []() { return MyResult<std::string>::Ok("Success"); });
   EXPECT_TRUE(chained.is_ok());
   EXPECT_EQ(chained.value(), "Success");
 }
@@ -588,9 +755,9 @@ TEST(PollIfTest, ValueSatisfiedEventually) {
   int counter = 0;
   auto io = IO<int>([&counter](IO<int>::Callback cb) {
               cb(IO<int>::IOResult::Ok(counter++));
-            })
-                .poll_if(5, std::chrono::milliseconds(10), ioc,
-                         [](const int& v) { return v >= 3; });
+            }).poll_if(5, std::chrono::milliseconds(10), ioc, [](const int& v) {
+    return v >= 3;
+  });
 
   bool called = false;
   io.run([&](IO<int>::IOResult r) {
@@ -626,9 +793,10 @@ TEST(PollIfTest, ErrorThenSuccessWithRetryPredicate) {
                 cb(IO<int>::IOResult::Ok(42));
               }
             })
-                .poll_if(3, std::chrono::milliseconds(5), ioc,
-                         [](const int& v) { return v == 42; },
-                         [](const Error& e) { return e.code == 9; });
+                .poll_if(
+                    3, std::chrono::milliseconds(5), ioc,
+                    [](const int& v) { return v == 42; },
+                    [](const Error& e) { return e.code == 9; });
   bool called = false;
   io.run([&](IO<int>::IOResult r) {
     ASSERT_TRUE(r.is_ok());
@@ -643,8 +811,9 @@ TEST(PollIfVoidTest, SatisfiedAfterActions) {
   boost::asio::io_context ioc;
   int counter = 0;
   auto action = IO<void>::pure().map([&counter]() { counter++; });
-  auto polled = std::move(action).poll_if(
-      5, std::chrono::milliseconds(5), ioc, [&counter]() { return counter >= 2; });
+  auto polled =
+      std::move(action).poll_if(5, std::chrono::milliseconds(5), ioc,
+                                [&counter]() { return counter >= 2; });
 
   bool called = false;
   polled.run([&](IO<void>::IOResult r) {
@@ -672,10 +841,10 @@ TEST(IOTest, NonCopyableThunkFailsToClone) {
   auto nc_ptr =
       std::make_shared<NonCopyable>(std::move(nc));  // move once to heap
 
-  auto io = IO<int>([nc_ptr](IO<int>::Callback cb) {
-              cb(IO<int>::IOResult::Err(
-          make_error(42, "NonCopyable thunk failed")));
-            }).retry_exponential(3, std::chrono::milliseconds(500), ioc);
+  auto io =
+      IO<int>([nc_ptr](IO<int>::Callback cb) {
+        cb(IO<int>::IOResult::Err(make_error(42, "NonCopyable thunk failed")));
+      }).retry_exponential(3, std::chrono::milliseconds(500), ioc);
 
   // ✅ this will compile and run, but now the lambda is copyable due to
   // shared_ptr
@@ -846,9 +1015,7 @@ TEST(StopIndicatorTest, to_stop) {
 
 TEST(ApiHandlerTest, Download) {
   monad::IO<apihandler::DownloadFile>::pure(
-      apihandler::DownloadFile{ "file-not-exist",
-                                "html/text",
-                                "hello"})
+      apihandler::DownloadFile{"file-not-exist", "html/text", "hello"})
       .then(apihandler::http_response_gen_fn)
       .run([](auto r) {
         EXPECT_FALSE(r.is_ok());
@@ -908,8 +1075,8 @@ TEST(ApiResponseTest, deleted_construct) {
   ApiDataResponse<int> response1 = response;  // copyable
 
   int i = 5;
-  // ApiDataResponse<int> response3(i, "text/plain");  // Should not compile, as it
-  // is deleted ApiDataResponse<int> response3(i);
+  // ApiDataResponse<int> response3(i, "text/plain");  // Should not compile, as
+  // it is deleted ApiDataResponse<int> response3(i);
 }
 
 TEST(IOTest, current_dir) {
@@ -919,7 +1086,7 @@ TEST(IOTest, current_dir) {
 
 TEST(IOTypeAliasTest, CommonTypeAliases) {
   using namespace monad;
-  
+
   // Test VoidIO
   bool void_called = false;
   VoidIO::pure().run([&void_called](VoidIO::IOResult result) {
@@ -927,16 +1094,17 @@ TEST(IOTypeAliasTest, CommonTypeAliases) {
     void_called = true;
   });
   EXPECT_TRUE(void_called);
-  
+
   // Test StringIO
   bool string_called = false;
-  StringIO::pure("hello world").run([&string_called](StringIO::IOResult result) {
-    ASSERT_TRUE(result.is_ok());
-    EXPECT_EQ(result.value(), "hello world");
-    string_called = true;
-  });
+  StringIO::pure("hello world")
+      .run([&string_called](StringIO::IOResult result) {
+        ASSERT_TRUE(result.is_ok());
+        EXPECT_EQ(result.value(), "hello world");
+        string_called = true;
+      });
   EXPECT_TRUE(string_called);
-  
+
   // Test IntIO and Int64IO
   bool int_called = false;
   IntIO::pure(42).run([&int_called](IntIO::IOResult result) {
@@ -945,15 +1113,16 @@ TEST(IOTypeAliasTest, CommonTypeAliases) {
     int_called = true;
   });
   EXPECT_TRUE(int_called);
-  
+
   bool int64_called = false;
-  Int64IO::pure(9223372036854775807LL).run([&int64_called](Int64IO::IOResult result) {
-    ASSERT_TRUE(result.is_ok());
-    EXPECT_EQ(result.value(), 9223372036854775807LL);
-    int64_called = true;
-  });
+  Int64IO::pure(9223372036854775807LL)
+      .run([&int64_called](Int64IO::IOResult result) {
+        ASSERT_TRUE(result.is_ok());
+        EXPECT_EQ(result.value(), 9223372036854775807LL);
+        int64_called = true;
+      });
   EXPECT_TRUE(int64_called);
-  
+
   // Test BoolIO
   bool bool_called = false;
   BoolIO::pure(true).run([&bool_called](BoolIO::IOResult result) {
@@ -966,22 +1135,24 @@ TEST(IOTypeAliasTest, CommonTypeAliases) {
 
 TEST(IOTypeAliasTest, ContainerAndJsonTypes) {
   using namespace monad;
-  
+
   // Test StringVectorIO
   std::vector<std::string> vec = {"hello", "world", "test"};
   bool vector_called = false;
-  StringVectorIO::pure(vec).run([&vector_called](StringVectorIO::IOResult result) {
-    ASSERT_TRUE(result.is_ok());
-    EXPECT_EQ(result.value().size(), 3);
-    EXPECT_EQ(result.value()[0], "hello");
-    EXPECT_EQ(result.value()[1], "world");
-    EXPECT_EQ(result.value()[2], "test");
-    vector_called = true;
-  });
+  StringVectorIO::pure(vec).run(
+      [&vector_called](StringVectorIO::IOResult result) {
+        ASSERT_TRUE(result.is_ok());
+        EXPECT_EQ(result.value().size(), 3);
+        EXPECT_EQ(result.value()[0], "hello");
+        EXPECT_EQ(result.value()[1], "world");
+        EXPECT_EQ(result.value()[2], "test");
+        vector_called = true;
+      });
   EXPECT_TRUE(vector_called);
-  
+
   // Test JsonIO
-  boost::json::value json_val = boost::json::object{{"key", "value"}, {"number", 42}};
+  boost::json::value json_val =
+      boost::json::object{{"key", "value"}, {"number", 42}};
   bool json_called = false;
   JsonIO::pure(json_val).run([&json_called](JsonIO::IOResult result) {
     ASSERT_TRUE(result.is_ok());
@@ -995,77 +1166,81 @@ TEST(IOTypeAliasTest, ContainerAndJsonTypes) {
 
 TEST(IOTypeAliasTest, OptionalTypes) {
   using namespace monad;
-  
+
   // Test OptionalStringIO with value
   std::optional<std::string> opt_with_value = "optional content";
   bool opt_string_called = false;
-  OptionalStringIO::pure(opt_with_value).run([&opt_string_called](OptionalStringIO::IOResult result) {
-    ASSERT_TRUE(result.is_ok());
-    ASSERT_TRUE(result.value().has_value());
-    EXPECT_EQ(result.value().value(), "optional content");
-    opt_string_called = true;
-  });
+  OptionalStringIO::pure(opt_with_value)
+      .run([&opt_string_called](OptionalStringIO::IOResult result) {
+        ASSERT_TRUE(result.is_ok());
+        ASSERT_TRUE(result.value().has_value());
+        EXPECT_EQ(result.value().value(), "optional content");
+        opt_string_called = true;
+      });
   EXPECT_TRUE(opt_string_called);
-  
+
   // Test OptionalIntIO with no value
   std::optional<int> opt_empty;
   bool opt_int_called = false;
-  OptionalIntIO::pure(opt_empty).run([&opt_int_called](OptionalIntIO::IOResult result) {
-    ASSERT_TRUE(result.is_ok());
-    EXPECT_FALSE(result.value().has_value());
-    opt_int_called = true;
-  });
+  OptionalIntIO::pure(opt_empty).run(
+      [&opt_int_called](OptionalIntIO::IOResult result) {
+        ASSERT_TRUE(result.is_ok());
+        EXPECT_FALSE(result.value().has_value());
+        opt_int_called = true;
+      });
   EXPECT_TRUE(opt_int_called);
 }
 
 TEST(IOVoidTest, MapToProducesValues) {
   using namespace monad;
-  
+
   // Test map_to converting void to int
   bool int_called = false;
-  VoidIO::pure().map_to([]() { 
-    return 42; 
-  }).run([&int_called](IntIO::IOResult result) {
-    ASSERT_TRUE(result.is_ok());
-    EXPECT_EQ(result.value(), 42);
-    int_called = true;
-  });
+  VoidIO::pure()
+      .map_to([]() { return 42; })
+      .run([&int_called](IntIO::IOResult result) {
+        ASSERT_TRUE(result.is_ok());
+        EXPECT_EQ(result.value(), 42);
+        int_called = true;
+      });
   EXPECT_TRUE(int_called);
-  
+
   // Test map_to converting void to string
   bool string_called = false;
-  VoidIO::pure().map_to([]() { 
-    return std::string("generated value"); 
-  }).run([&string_called](StringIO::IOResult result) {
-    ASSERT_TRUE(result.is_ok());
-    EXPECT_EQ(result.value(), "generated value");
-    string_called = true;
-  });
+  VoidIO::pure()
+      .map_to([]() { return std::string("generated value"); })
+      .run([&string_called](StringIO::IOResult result) {
+        ASSERT_TRUE(result.is_ok());
+        EXPECT_EQ(result.value(), "generated value");
+        string_called = true;
+      });
   EXPECT_TRUE(string_called);
-  
+
   // Test map_to with error propagation
   bool error_called = false;
-  VoidIO::fail(Error{404, "Not Found"}).map_to([]() {
-    ADD_FAILURE() << "Should not be called on error";
-    return 99;
-  }).run([&error_called](IntIO::IOResult result) {
-    ASSERT_TRUE(result.is_err());
-    EXPECT_EQ(result.error().code, 404);
-    EXPECT_EQ(result.error().what, "Not Found");
-    error_called = true;
-  });
+  VoidIO::fail(Error{404, "Not Found"})
+      .map_to([]() {
+        ADD_FAILURE() << "Should not be called on error";
+        return 99;
+      })
+      .run([&error_called](IntIO::IOResult result) {
+        ASSERT_TRUE(result.is_err());
+        EXPECT_EQ(result.error().code, 404);
+        EXPECT_EQ(result.error().what, "Not Found");
+        error_called = true;
+      });
   EXPECT_TRUE(error_called);
-  
+
   // Test map_to with exception handling
   bool exception_called = false;
-  VoidIO::pure().map_to([]() -> int {
-    throw std::runtime_error("Something went wrong");
-  }).run([&exception_called](IntIO::IOResult result) {
-    ASSERT_TRUE(result.is_err());
-    EXPECT_EQ(result.error().code, -1);
-    EXPECT_EQ(result.error().what, "Something went wrong");
-    exception_called = true;
-  });
+  VoidIO::pure()
+      .map_to([]() -> int { throw std::runtime_error("Something went wrong"); })
+      .run([&exception_called](IntIO::IOResult result) {
+        ASSERT_TRUE(result.is_err());
+        EXPECT_EQ(result.error().code, -1);
+        EXPECT_EQ(result.error().what, "Something went wrong");
+        exception_called = true;
+      });
   EXPECT_TRUE(exception_called);
 }
 }  // namespace

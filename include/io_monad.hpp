@@ -1,6 +1,7 @@
 // io_monad.hpp (v2 as default)
 #pragma once
 
+#include <atomic>
 #include <boost/asio.hpp>
 #include <boost/json.hpp>
 #include <chrono>
@@ -9,7 +10,9 @@
 #include <filesystem>
 #include <fstream>
 #include <functional>
+#include <iterator>
 #include <memory>
+#include <mutex>
 #include <optional>
 #include <string>
 #include <tuple>
@@ -102,8 +105,9 @@ class IO {
   }
 
   template <typename F>
-  auto then(F&& f) const -> typename std::enable_if<!std::is_void_v<T>, 
-      std::invoke_result_t<F, T>>::type {
+  auto then(F&& f) const ->
+      typename std::enable_if<!std::is_void_v<T>,
+                              std::invoke_result_t<F, T>>::type {
     using NextIO = std::invoke_result_t<F, T>;
     static_assert(is_io_v<NextIO>, "then() must return IO<U>");
     return NextIO([prev = *this, fn = std::forward<F>(f)](
@@ -217,8 +221,7 @@ class IO {
           [cb, fired](const boost::system::error_code& ec) mutable {
             if (*fired) return;
             *fired = true;
-            if (!ec)
-              cb(Result<T, Error>::Err(Error{2, "Operation timed out"}));
+            if (!ec) cb(Result<T, Error>::Err(Error{2, "Operation timed out"}));
           });
 
       self.run([cb, timer, fired](IOResult r) mutable {
@@ -341,40 +344,42 @@ class IO {
 
       auto state = std::make_shared<RetryState>();
       state->attempt = std::make_shared<int>(0);
-      state->try_run = std::make_shared<std::function<void(std::chrono::milliseconds)>>();
+      state->try_run =
+          std::make_shared<std::function<void(std::chrono::milliseconds)>>();
       state->self_ptr = self_ptr;
 
       std::weak_ptr<std::function<void(std::chrono::milliseconds)>> weak_try =
           state->try_run;
 
       // assign explicit capture lambda to avoid capturing `try_run` by value
-      *state->try_run = [max_attempts, should_retry, state, weak_try, ioc_ptr, cb](std::chrono::milliseconds current_delay) mutable {
+      *state->try_run = [max_attempts, should_retry, state, weak_try, ioc_ptr,
+                         cb](std::chrono::milliseconds current_delay) mutable {
         (*state->attempt)++;
-        state->self_ptr->clone().run(
-            [max_attempts, state, should_retry, weak_try, cb, ioc_ptr,
-             current_delay](IOResult r) mutable {
-              if (r.is_ok() || *state->attempt >= max_attempts ||
-                  !should_retry(r.error())) {
-                // cleanup before delivering final result to break cycles
-                state->cleanup();
-                cb(std::move(r));
+        state->self_ptr->clone().run([max_attempts, state, should_retry,
+                                      weak_try, cb, ioc_ptr,
+                                      current_delay](IOResult r) mutable {
+          if (r.is_ok() || *state->attempt >= max_attempts ||
+              !should_retry(r.error())) {
+            // cleanup before delivering final result to break cycles
+            state->cleanup();
+            cb(std::move(r));
+          } else {
+            auto timer = std::make_shared<boost::asio::steady_timer>(*ioc_ptr);
+            timer->expires_after(current_delay);
+            timer->async_wait([weak_try, timer, cb, current_delay](
+                                  const boost::system::error_code& ec) mutable {
+              if (ec) {
+                // nothing to cleanup here as final will be delivered
+                cb(Result<T, Error>::Err(
+                    Error{1, std::string{"Timer error: "} + ec.message()}));
               } else {
-                auto timer = std::make_shared<boost::asio::steady_timer>(*ioc_ptr);
-                timer->expires_after(current_delay);
-        timer->async_wait([
-          weak_try, timer, cb, current_delay](const boost::system::error_code& ec) mutable {
-                  if (ec) {
-                    // nothing to cleanup here as final will be delivered
-                    cb(Result<T, Error>::Err(
-                        Error{1, std::string{"Timer error: "} + ec.message()}));
-                  } else {
-                    if (auto sp = weak_try.lock()) {
-                      (*sp)(current_delay * 2);
-                    }
-                  }
-                });
+                if (auto sp = weak_try.lock()) {
+                  (*sp)(current_delay * 2);
+                }
               }
             });
+          }
+        });
       };
 
       (*state->try_run)(initial_delay);
@@ -393,12 +398,14 @@ class IO {
   // - interval: delay between attempts when not satisfied or retrying on error
   // - ioc: io_context for timers
   // - satisfied: predicate to decide if we can stop successfully
-  // - retry_on_error: if returns true, keep retrying on error; otherwise fail immediately
-  IO<T> poll_if(int max_attempts, std::chrono::milliseconds interval,
-                boost::asio::io_context& ioc,
-                std::function<bool(const T&)> satisfied,
-                std::function<bool(const Error&)> retry_on_error =
-                    [](const Error&) { return true; }) && {
+  // - retry_on_error: if returns true, keep retrying on error; otherwise fail
+  // immediately
+  IO<T> poll_if(
+      int max_attempts, std::chrono::milliseconds interval,
+      boost::asio::io_context& ioc, std::function<bool(const T&)> satisfied,
+      std::function<bool(const Error&)> retry_on_error = [](const Error&) {
+        return true;
+      }) && {
     return IO<T>([max_attempts, interval, ioc_ptr = &ioc,
                   satisfied = std::move(satisfied),
                   retry_on_error = std::move(retry_on_error),
@@ -407,7 +414,8 @@ class IO {
       struct PollState {
         std::shared_ptr<int> attempt;
         std::shared_ptr<std::function<void()>> do_attempt;
-        std::shared_ptr<std::shared_ptr<std::function<void()>>> keep_alive_holder;
+        std::shared_ptr<std::shared_ptr<std::function<void()>>>
+            keep_alive_holder;
         std::shared_ptr<IO<T>> self_ptr;
 
         // cleanup intentionally left empty; actual cleanup is scheduled
@@ -419,7 +427,9 @@ class IO {
       auto state = std::make_shared<PollState>();
       state->attempt = std::make_shared<int>(0);
       state->do_attempt = std::make_shared<std::function<void()>>();
-      state->keep_alive_holder = std::make_shared<std::shared_ptr<std::function<void()>>>(state->do_attempt);
+      state->keep_alive_holder =
+          std::make_shared<std::shared_ptr<std::function<void()>>>(
+              state->do_attempt);
       state->self_ptr = self_ptr;
 
       std::weak_ptr<std::function<void()>> weak_attempt = state->do_attempt;
@@ -444,13 +454,15 @@ class IO {
         });
       };
 
-      auto handle_result = [state, max_attempts, cb, interval, ioc_ptr, satisfied, retry_on_error, weak_attempt, release_keep_alive, cleanup](IOResult r) mutable {
+      auto handle_result = [state, max_attempts, cb, interval, ioc_ptr,
+                            satisfied, retry_on_error, weak_attempt,
+                            release_keep_alive, cleanup](IOResult r) mutable {
         auto enqueue_retry = [&]() {
           auto keep_alive_copy = *state->keep_alive_holder;
           auto timer = std::make_shared<boost::asio::steady_timer>(*ioc_ptr);
           timer->expires_after(interval);
-          timer->async_wait([weak_attempt, state, keep_alive_copy,
-                             timer, cb, release_keep_alive, cleanup](
+          timer->async_wait([weak_attempt, state, keep_alive_copy, timer, cb,
+                             release_keep_alive, cleanup](
                                 const boost::system::error_code& ec) mutable {
             if (ec) {
               // final failure from timer - schedule cleanup then deliver
@@ -484,7 +496,8 @@ class IO {
         }
       };
 
-      *state->do_attempt = [state, max_attempts, cb, handle_result, release_keep_alive, cleanup]() mutable {
+      *state->do_attempt = [state, max_attempts, cb, handle_result,
+                            release_keep_alive, cleanup]() mutable {
         if (*state->attempt >= max_attempts) {
           cleanup();
           cb(Result<T, Error>::Err(Error{3, "Polling attempts exhausted"}));
@@ -497,24 +510,25 @@ class IO {
       (*state->do_attempt)();
     });
   }
-  IO<T> poll_if(int max_attempts, std::chrono::milliseconds interval,
-                boost::asio::io_context& ioc,
-                std::function<bool(const T&)> satisfied,
-                std::function<bool(const Error&)> retry_on_error =
-                    [](const Error&) { return true; }) & {
+  IO<T> poll_if(
+      int max_attempts, std::chrono::milliseconds interval,
+      boost::asio::io_context& ioc, std::function<bool(const T&)> satisfied,
+      std::function<bool(const Error&)> retry_on_error = [](const Error&) {
+        return true;
+      }) & {
     return std::move(*this).poll_if(max_attempts, interval, ioc,
                                     std::move(satisfied),
                                     std::move(retry_on_error));
   }
 
   // Executor-aware poll_if for IO<T>
-  IO<T> poll_if(int max_attempts, std::chrono::milliseconds interval,
-                boost::asio::any_io_executor ex,
-                std::function<bool(const T&)> satisfied,
-                std::function<bool(const Error&)> retry_on_error =
-                    [](const Error&) { return true; }) && {
-    return IO<T>([max_attempts, interval, ex,
-                  satisfied = std::move(satisfied),
+  IO<T> poll_if(
+      int max_attempts, std::chrono::milliseconds interval,
+      boost::asio::any_io_executor ex, std::function<bool(const T&)> satisfied,
+      std::function<bool(const Error&)> retry_on_error = [](const Error&) {
+        return true;
+      }) && {
+    return IO<T>([max_attempts, interval, ex, satisfied = std::move(satisfied),
                   retry_on_error = std::move(retry_on_error),
                   self_ptr = std::make_shared<IO<T>>(std::move(*this))](
                      auto cb) mutable {
@@ -524,16 +538,16 @@ class IO {
           std::make_shared<std::shared_ptr<std::function<void()>>>(do_attempt);
       std::weak_ptr<std::function<void()>> weak_attempt = do_attempt;
 
-      auto release_keep_alive =
-          [keep_alive_holder]() mutable {
-            if (keep_alive_holder && *keep_alive_holder) {
-              keep_alive_holder->reset();
-            }
-          };
+      auto release_keep_alive = [keep_alive_holder]() mutable {
+        if (keep_alive_holder && *keep_alive_holder) {
+          keep_alive_holder->reset();
+        }
+      };
 
       auto handle_result = [attempt, max_attempts, cb, self_ptr, interval, ex,
                             satisfied, retry_on_error, weak_attempt,
-                            keep_alive_holder, release_keep_alive](IOResult r) mutable {
+                            keep_alive_holder,
+                            release_keep_alive](IOResult r) mutable {
         auto enqueue_retry = [&]() {
           auto keep_alive_copy = *keep_alive_holder;
           auto timer = std::make_shared<boost::asio::steady_timer>(ex);
@@ -586,11 +600,12 @@ class IO {
       (*do_attempt)();
     });
   }
-  IO<T> poll_if(int max_attempts, std::chrono::milliseconds interval,
-                boost::asio::any_io_executor ex,
-                std::function<bool(const T&)> satisfied,
-                std::function<bool(const Error&)> retry_on_error =
-                    [](const Error&) { return true; }) & {
+  IO<T> poll_if(
+      int max_attempts, std::chrono::milliseconds interval,
+      boost::asio::any_io_executor ex, std::function<bool(const T&)> satisfied,
+      std::function<bool(const Error&)> retry_on_error = [](const Error&) {
+        return true;
+      }) & {
     return std::move(*this).poll_if(max_attempts, interval, ex,
                                     std::move(satisfied),
                                     std::move(retry_on_error));
@@ -828,11 +843,12 @@ class IO<void> {
       };
 
       *try_run = [max_attempts, attempt, ioc_ptr, should_retry, self_ptr,
-                  weak_try, cb, cleanup](std::chrono::milliseconds current_delay) mutable {
+                  weak_try, cb,
+                  cleanup](std::chrono::milliseconds current_delay) mutable {
         (*attempt)++;
-        self_ptr->clone().run([
-            max_attempts, attempt, should_retry, weak_try, cb, ioc_ptr,
-            current_delay, cleanup](IOResult r) mutable {
+        self_ptr->clone().run([max_attempts, attempt, should_retry, weak_try,
+                               cb, ioc_ptr, current_delay,
+                               cleanup](IOResult r) mutable {
           if (r.is_ok() || *attempt >= max_attempts ||
               !should_retry(r.error())) {
             // cleanup before delivering final result
@@ -841,8 +857,8 @@ class IO<void> {
           } else {
             auto timer = std::make_shared<boost::asio::steady_timer>(*ioc_ptr);
             timer->expires_after(current_delay);
-            timer->async_wait([
-                weak_try, timer, cb, current_delay, cleanup](const boost::system::error_code& ec) mutable {
+            timer->async_wait([weak_try, timer, cb, current_delay, cleanup](
+                                  const boost::system::error_code& ec) mutable {
               if (ec) {
                 // cleanup then deliver final failure
                 cleanup();
@@ -872,11 +888,12 @@ class IO<void> {
   // Poll IO<void> until external condition is satisfied. After each run, call
   // satisfied(); if false, wait interval and retry. Errors are retried if
   // retry_on_error returns true and attempts remain.
-  IO<void> poll_if(int max_attempts, std::chrono::milliseconds interval,
-                   boost::asio::io_context& ioc,
-                   std::function<bool()> satisfied,
-                   std::function<bool(const Error&)> retry_on_error =
-                       [](const Error&) { return true; }) && {
+  IO<void> poll_if(
+      int max_attempts, std::chrono::milliseconds interval,
+      boost::asio::io_context& ioc, std::function<bool()> satisfied,
+      std::function<bool(const Error&)> retry_on_error = [](const Error&) {
+        return true;
+      }) && {
     return IO<void>([max_attempts, interval, ioc_ptr = &ioc,
                      satisfied = std::move(satisfied),
                      retry_on_error = std::move(retry_on_error),
@@ -888,16 +905,16 @@ class IO<void> {
           std::make_shared<std::shared_ptr<std::function<void()>>>(do_attempt);
       std::weak_ptr<std::function<void()>> weak_attempt = do_attempt;
 
-      auto release_keep_alive =
-          [keep_alive_holder]() mutable {
-            if (keep_alive_holder && *keep_alive_holder) {
-              keep_alive_holder->reset();
-            }
-          };
+      auto release_keep_alive = [keep_alive_holder]() mutable {
+        if (keep_alive_holder && *keep_alive_holder) {
+          keep_alive_holder->reset();
+        }
+      };
 
       auto handle_result = [attempt, max_attempts, cb, self_ptr, interval,
                             ioc_ptr, satisfied, retry_on_error, weak_attempt,
-                            keep_alive_holder, release_keep_alive](IOResult r) mutable {
+                            keep_alive_holder,
+                            release_keep_alive](IOResult r) mutable {
         auto enqueue_retry = [&]() {
           auto keep_alive_copy = *keep_alive_holder;
           auto timer = std::make_shared<boost::asio::steady_timer>(*ioc_ptr);
@@ -951,11 +968,12 @@ class IO<void> {
   }
 
   // Executor-aware poll_if for IO<void>
-  IO<void> poll_if(int max_attempts, std::chrono::milliseconds interval,
-                   boost::asio::any_io_executor ex,
-                   std::function<bool()> satisfied,
-                   std::function<bool(const Error&)> retry_on_error =
-                       [](const Error&) { return true; }) && {
+  IO<void> poll_if(
+      int max_attempts, std::chrono::milliseconds interval,
+      boost::asio::any_io_executor ex, std::function<bool()> satisfied,
+      std::function<bool(const Error&)> retry_on_error = [](const Error&) {
+        return true;
+      }) && {
     return IO<void>([max_attempts, interval, ex,
                      satisfied = std::move(satisfied),
                      retry_on_error = std::move(retry_on_error),
@@ -967,16 +985,16 @@ class IO<void> {
           std::make_shared<std::shared_ptr<std::function<void()>>>(do_attempt);
       std::weak_ptr<std::function<void()>> weak_attempt = do_attempt;
 
-      auto release_keep_alive =
-          [keep_alive_holder]() mutable {
-            if (keep_alive_holder && *keep_alive_holder) {
-              keep_alive_holder->reset();
-            }
-          };
+      auto release_keep_alive = [keep_alive_holder]() mutable {
+        if (keep_alive_holder && *keep_alive_holder) {
+          keep_alive_holder->reset();
+        }
+      };
 
       auto handle_result = [attempt, max_attempts, cb, self_ptr, interval, ex,
                             satisfied, retry_on_error, weak_attempt,
-                            keep_alive_holder, release_keep_alive](IOResult r) mutable {
+                            keep_alive_holder,
+                            release_keep_alive](IOResult r) mutable {
         auto enqueue_retry = [&]() {
           auto keep_alive_copy = *keep_alive_holder;
           auto timer = std::make_shared<boost::asio::steady_timer>(ex);
@@ -1029,11 +1047,12 @@ class IO<void> {
     });
   }
 
-  IO<void> poll_if(int max_attempts, std::chrono::milliseconds interval,
-                   boost::asio::any_io_executor ex,
-                   std::function<bool()> satisfied,
-                   std::function<bool(const Error&)> retry_on_error =
-                       [](const Error&) { return true; }) & {
+  IO<void> poll_if(
+      int max_attempts, std::chrono::milliseconds interval,
+      boost::asio::any_io_executor ex, std::function<bool()> satisfied,
+      std::function<bool(const Error&)> retry_on_error = [](const Error&) {
+        return true;
+      }) & {
     return std::move(*this).poll_if(max_attempts, interval, ex,
                                     std::move(satisfied),
                                     std::move(retry_on_error));
@@ -1215,13 +1234,14 @@ inline IO<std::vector<T>> collect_io(std::vector<IO<T>> items) {
       }
 
       auto current = (*items)[*idx].clone();
-  // Hold shared ownership so the recursive step survives until callback completes
-  auto step_keepalive = weak_step.lock();
-      current.run([
-                    items, out, idx, cb, weak_step,
-                    step_keepalive = std::move(step_keepalive)
-                  ](Result<T, Error> r) mutable {
-        (void)step_keepalive;  // ensure recursive step stays alive until callback fires
+      // Hold shared ownership so the recursive step survives until callback
+      // completes
+      auto step_keepalive = weak_step.lock();
+      current.run([items, out, idx, cb, weak_step,
+                   step_keepalive =
+                       std::move(step_keepalive)](Result<T, Error> r) mutable {
+        (void)step_keepalive;  // ensure recursive step stays alive until
+                               // callback fires
         if (r.is_err()) {
           cb(Result<std::vector<T>, Error>::Err(r.error()));
           return;
@@ -1245,6 +1265,124 @@ inline IO<std::vector<T>> collect_io(std::initializer_list<IO<T>> items) {
   return collect_io(std::vector<IO<T>>(items));
 }
 
+// Runs a batch of IO<T> concurrently and collects successful results.
+// - Every IO is cloned and started immediately, so all callbacks may race.
+// - The output vector preserves the original order regardless of completion
+//   timing.
+// - The first error stops the aggregation; other callbacks short-circuit.
+template <typename T>
+inline IO<std::vector<T>> collect_io_parallel(std::vector<IO<T>> items) {
+  return IO<std::vector<T>>([items = std::make_shared<std::vector<IO<T>>>(
+                                 std::move(items))](auto cb) mutable {
+    if (items->empty()) {
+      cb(Result<std::vector<T>, Error>::Ok({}));
+      return;
+    }
+
+    auto results =
+        std::make_shared<std::vector<std::optional<T>>>(items->size());
+    auto remaining = std::make_shared<std::atomic<std::size_t>>(items->size());
+    auto done = std::make_shared<std::atomic<bool>>(false);
+    auto guard = std::make_shared<std::mutex>();
+    auto cb_ptr =
+        std::make_shared<typename IO<std::vector<T>>::Callback>(std::move(cb));
+
+    for (std::size_t idx = 0; idx < items->size(); ++idx) {
+      auto current = (*items)[idx].clone();
+      current.run([items, results, remaining, done, guard, cb_ptr,
+                   index = idx](Result<T, Error> r) mutable {
+        if (done->load(std::memory_order_acquire)) return;
+
+        if (r.is_err()) {
+          bool expected = false;
+          auto err = std::move(r).error();
+          if (done->compare_exchange_strong(expected, true,
+                                            std::memory_order_acq_rel)) {
+            (*cb_ptr)(Result<std::vector<T>, Error>::Err(std::move(err)));
+          }
+          return;
+        }
+
+        {
+          std::lock_guard<std::mutex> lock(*guard);
+          (*results)[index].emplace(std::move(r).value());
+        }
+
+        if (remaining->fetch_sub(1, std::memory_order_acq_rel) == 1) {
+          bool expected = false;
+          if (done->compare_exchange_strong(expected, true,
+                                            std::memory_order_acq_rel)) {
+            std::vector<T> final;
+            final.reserve(results->size());
+            for (auto& slot : *results) {
+              final.push_back(std::move(slot.value()));
+            }
+            (*cb_ptr)(Result<std::vector<T>, Error>::Ok(std::move(final)));
+          }
+        }
+      });
+    }
+  });
+}
+
+template <typename T>
+inline IO<std::vector<T>> collect_io_parallel(
+    std::initializer_list<IO<T>> items) {
+  return collect_io_parallel(std::vector<IO<T>>(items));
+}
+
+// Bounded-parallel variant that executes chunks of IOs concurrently.
+// Each chunk runs with full parallelism, and chunks are processed serially.
+template <typename T>
+inline IO<std::vector<T>> collect_io_parallel(std::vector<IO<T>> items,
+                                              std::size_t concurrency) {
+  if (concurrency <= 1) {
+    return collect_io(std::move(items));
+  }
+  if (items.empty() || concurrency >= items.size()) {
+    return collect_io_parallel(std::move(items));
+  }
+
+  std::vector<IO<std::vector<T>>> batches;
+  batches.reserve((items.size() + concurrency - 1) / concurrency);
+
+  std::size_t index = 0;
+  while (index < items.size()) {
+    std::size_t end = index + concurrency;
+    if (end > items.size()) end = items.size();
+    std::vector<IO<T>> chunk;
+    chunk.reserve(end - index);
+    for (std::size_t i = index; i < end; ++i) {
+      chunk.push_back(std::move(items[i]));
+    }
+    batches.push_back(collect_io_parallel(std::move(chunk)));
+    index = end;
+  }
+
+  return collect_io(std::move(batches))
+      .map([](std::vector<std::vector<T>> nested) {
+        std::size_t total = 0;
+        for (const auto& chunk : nested) {
+          total += chunk.size();
+        }
+
+        std::vector<T> flat;
+        flat.reserve(total);
+        for (auto& chunk : nested) {
+          flat.insert(flat.end(), std::make_move_iterator(chunk.begin()),
+                      std::make_move_iterator(chunk.end()));
+        }
+
+        return flat;
+      });
+}
+
+template <typename T>
+inline IO<std::vector<T>> collect_io_parallel(
+    std::initializer_list<IO<T>> items, std::size_t concurrency) {
+  return collect_io_parallel(std::vector<IO<T>>(items), concurrency);
+}
+
 // Runs IO<T> sequentially and returns the raw Result stream (success/failure).
 // Useful when the caller needs to inspect which entries failed instead of
 // short-circuiting on the first error.
@@ -1252,7 +1390,8 @@ template <typename T>
 inline IO<std::vector<Result<T, Error>>> collect_result_io(
     std::vector<IO<T>> items) {
   return IO<std::vector<Result<T, Error>>>(
-      [items = std::make_shared<std::vector<IO<T>>>(std::move(items))](auto cb) mutable {
+      [items = std::make_shared<std::vector<IO<T>>>(std::move(items))](
+          auto cb) mutable {
         auto out = std::make_shared<std::vector<Result<T, Error>>>();
         out->reserve(items->size());
         auto idx = std::make_shared<size_t>(0);
@@ -1261,18 +1400,20 @@ inline IO<std::vector<Result<T, Error>>> collect_result_io(
 
         *step = [items, out, idx, cb, weak_step]() mutable {
           if (*idx >= items->size()) {
-            cb(Result<std::vector<Result<T, Error>>, Error>::Ok(std::move(*out)));
+            cb(Result<std::vector<Result<T, Error>>, Error>::Ok(
+                std::move(*out)));
             return;
           }
 
           auto current = (*items)[*idx].clone();
-          // Hold shared ownership so the recursive step survives until callback completes
+          // Hold shared ownership so the recursive step survives until callback
+          // completes
           auto step_keepalive = weak_step.lock();
-          current.run([
-                        items, out, idx, cb, weak_step,
-                        step_keepalive = std::move(step_keepalive)
-                      ](Result<T, Error> r) mutable {
-            (void)step_keepalive;  // ensure recursive step stays alive until callback fires
+          current.run([items, out, idx, cb, weak_step,
+                       step_keepalive = std::move(step_keepalive)](
+                          Result<T, Error> r) mutable {
+            (void)step_keepalive;  // ensure recursive step stays alive until
+                                   // callback fires
             out->push_back(std::move(r));
             ++(*idx);
 
@@ -1290,6 +1431,59 @@ template <typename T>
 inline IO<std::vector<Result<T, Error>>> collect_result_io(
     std::initializer_list<IO<T>> items) {
   return collect_result_io(std::vector<IO<T>>(items));
+}
+
+// Parallel variant that returns the raw Result stream for each IO.
+// All IOs run together, and the caller receives every success and error.
+template <typename T>
+inline IO<std::vector<Result<T, Error>>> collect_result_parallel(
+    std::vector<IO<T>> items) {
+  return IO<std::vector<Result<T, Error>>>(
+      [items = std::make_shared<std::vector<IO<T>>>(std::move(items))](
+          auto cb) mutable {
+        if (items->empty()) {
+          cb(Result<std::vector<Result<T, Error>>, Error>::Ok({}));
+          return;
+        }
+
+        auto results =
+            std::make_shared<std::vector<std::optional<Result<T, Error>>>>(
+                items->size());
+        auto remaining =
+            std::make_shared<std::atomic<std::size_t>>(items->size());
+        auto guard = std::make_shared<std::mutex>();
+        auto cb_ptr = std::make_shared<
+            typename IO<std::vector<Result<T, Error>>>::Callback>(
+            std::move(cb));
+
+        for (std::size_t idx = 0; idx < items->size(); ++idx) {
+          auto current = (*items)[idx].clone();
+          current.run([items, results, remaining, guard, cb_ptr,
+                       index = idx](Result<T, Error> r) mutable {
+            {
+              std::lock_guard<std::mutex> lock(*guard);
+              (*results)[index].emplace(std::move(r));
+            }
+
+            if (remaining->fetch_sub(1, std::memory_order_acq_rel) == 1) {
+              std::vector<Result<T, Error>> final;
+              final.reserve(results->size());
+              for (auto& slot : *results) {
+                final.push_back(std::move(slot.value()));
+              }
+
+              (*cb_ptr)(Result<std::vector<Result<T, Error>>, Error>::Ok(
+                  std::move(final)));
+            }
+          });
+        }
+      });
+}
+
+template <typename T>
+inline IO<std::vector<Result<T, Error>>> collect_result_parallel(
+    std::initializer_list<IO<T>> items) {
+  return collect_result_parallel(std::vector<IO<T>>(items));
 }
 
 inline IO<void> all_ok_io(std::vector<IO<void>> items) {

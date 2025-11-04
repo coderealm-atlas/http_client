@@ -6,6 +6,7 @@
 #include <string>
 
 #include "simple_data.hpp"
+#include "env_file_parser.hpp"
 
 namespace fs = std::filesystem;
 
@@ -27,12 +28,11 @@ fs::path write_temp_file(const std::string& content,
 
 }  // namespace
 
-// Note: parse_envrc is declared in an unnamed namespace within cjj365 inside
-// the header. Including the header into this TU makes it visible here with
-// internal linkage.
+// Historically the parser lived as parse_envrc inside simple_data.hpp. The
+// logic now lives in env_file_parser.hpp as parse_env_file, so these tests use
+// the public helper directly.
 
 TEST(ParseEnvrcTest, ParsesExportAndNonExport) {
-  using namespace cjj365;  // brings parse_envrc into scope for this TU
   const std::string content = R"(
     # comment and blank
     
@@ -40,7 +40,7 @@ TEST(ParseEnvrcTest, ParsesExportAndNonExport) {
     BAR=baz
   )";
   auto path = write_temp_file(content, "basic");
-  auto res = parse_envrc(path);
+  auto res = cjj365::parse_env_file(path);
   ASSERT_TRUE(res.is_ok()) << res.error().what;
   const auto& env = res.value();
   EXPECT_EQ(env.at("FOO"), "bar");
@@ -48,14 +48,13 @@ TEST(ParseEnvrcTest, ParsesExportAndNonExport) {
 }
 
 TEST(ParseEnvrcTest, HandlesWhitespaceAroundEquals) {
-  using namespace cjj365;
   const std::string content = R"(
     KEY1 = value1
     export KEY2=   value2
     KEY3   =   value3
   )";
   auto path = write_temp_file(content, "ws");
-  auto res = parse_envrc(path);
+  auto res = cjj365::parse_env_file(path);
   ASSERT_TRUE(res.is_ok()) << res.error().what;
   const auto& env = res.value();
   EXPECT_EQ(env.at("KEY1"), "value1");
@@ -64,14 +63,13 @@ TEST(ParseEnvrcTest, HandlesWhitespaceAroundEquals) {
 }
 
 TEST(ParseEnvrcTest, ParsesQuotedValuesAndIgnoresInlineComments) {
-  using namespace cjj365;
   const std::string content = R"(
     export Q1="hello world # not a comment"
     Q2=' spaced value with # still inside '
     Q3=unquoted  # trailing comment
   )";
   auto path = write_temp_file(content, "quotes");
-  auto res = parse_envrc(path);
+  auto res = cjj365::parse_env_file(path);
   ASSERT_TRUE(res.is_ok()) << res.error().what;
   const auto& env = res.value();
   EXPECT_EQ(env.at("Q1"), "hello world # not a comment");
@@ -80,12 +78,11 @@ TEST(ParseEnvrcTest, ParsesQuotedValuesAndIgnoresInlineComments) {
 }
 
 TEST(ParseEnvrcTest, SupportsPlusEqualAsAssignment) {
-  using namespace cjj365;
   const std::string content = R"(
     PATH+=/opt/bin
   )";
   auto path = write_temp_file(content, "pluseq");
-  auto res = parse_envrc(path);
+  auto res = cjj365::parse_env_file(path);
   ASSERT_TRUE(res.is_ok()) << res.error().what;
   const auto& env = res.value();
   // Parser treats KEY+=VALUE as plain assignment to KEY
@@ -93,14 +90,13 @@ TEST(ParseEnvrcTest, SupportsPlusEqualAsAssignment) {
 }
 
 TEST(ParseEnvrcTest, HandlesEmptyAndMissingValues) {
-  using namespace cjj365;
   const std::string content = R"(
     EMPTY=
     QUOTED_EMPTY=""
     SP_ONLY=   
   )";
   auto path = write_temp_file(content, "empty");
-  auto res = parse_envrc(path);
+  auto res = cjj365::parse_env_file(path);
   ASSERT_TRUE(res.is_ok()) << res.error().what;
   const auto& env = res.value();
   EXPECT_EQ(env.at("EMPTY"), "");
@@ -109,14 +105,13 @@ TEST(ParseEnvrcTest, HandlesEmptyAndMissingValues) {
 }
 
 TEST(ParseEnvrcTest, IgnoresGarbageLinesAndComments) {
-  using namespace cjj365;
   const std::string content = R"(
     # full line comment
     NOT_AN_ASSIGNMENT something
     export VALID=1 # ok
   )";
   auto path = write_temp_file(content, "garbage");
-  auto res = parse_envrc(path);
+  auto res = cjj365::parse_env_file(path);
   ASSERT_TRUE(res.is_ok()) << res.error().what;
   const auto& env = res.value();
   ASSERT_EQ(env.size(), 1u);
