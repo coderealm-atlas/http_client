@@ -509,6 +509,12 @@ struct SessionAttributes {
   std::vector<std::string> user_roles;
   std::vector<Permission> user_permissions;
   std::optional<std::string> country_of_residence;
+  std::optional<std::string> preferred_market_id;
+  std::optional<std::string> preferred_locale;
+  std::optional<std::string> preferred_currency;
+  std::optional<std::string> user_state;
+  std::optional<int64_t> email_verified_at;
+  std::optional<bool> email_verified;
   AuthBy auth_by = AuthBy::USERNAME_PASSWORD;
 
   // Auth context fields
@@ -602,6 +608,24 @@ struct SessionAttributes {
     if (sa.country_of_residence) {
       jo["country_of_residence"] = *sa.country_of_residence;
     }
+    if (sa.preferred_market_id) {
+      jo["preferred_market_id"] = *sa.preferred_market_id;
+    }
+    if (sa.preferred_locale) {
+      jo["preferred_locale"] = *sa.preferred_locale;
+    }
+    if (sa.preferred_currency) {
+      jo["preferred_currency"] = *sa.preferred_currency;
+    }
+    if (sa.user_state) {
+      jo["user_state"] = *sa.user_state;
+    }
+    if (sa.email_verified_at) {
+      jo["email_verified_at"] = *sa.email_verified_at;
+    }
+    if (sa.email_verified.has_value()) {
+      jo["email_verified"] = *sa.email_verified;
+    }
     jv = std::move(jo);
   }
 
@@ -651,6 +675,27 @@ struct SessionAttributes {
       }
       if (auto* attest_p = jo_p->if_contains("attestation_verified")) {
         sa.attestation_verified.emplace(attest_p->as_bool());
+      }
+      if (auto* country_p = jo_p->if_contains("country_of_residence")) {
+        sa.country_of_residence.emplace(country_p->as_string());
+      }
+      if (auto* market_p = jo_p->if_contains("preferred_market_id")) {
+        sa.preferred_market_id.emplace(market_p->as_string());
+      }
+      if (auto* locale_p = jo_p->if_contains("preferred_locale")) {
+        sa.preferred_locale.emplace(locale_p->as_string());
+      }
+      if (auto* currency_p = jo_p->if_contains("preferred_currency")) {
+        sa.preferred_currency.emplace(currency_p->as_string());
+      }
+      if (auto* state_p = jo_p->if_contains("user_state")) {
+        sa.user_state.emplace(state_p->as_string());
+      }
+      if (auto* verified_at_p = jo_p->if_contains("email_verified_at")) {
+        sa.email_verified_at.emplace(verified_at_p->to_number<int64_t>());
+      }
+      if (auto* verified_p = jo_p->if_contains("email_verified")) {
+        sa.email_verified.emplace(verified_p->as_bool());
       }
     }
     return sa;
