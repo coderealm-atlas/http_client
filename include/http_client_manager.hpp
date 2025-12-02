@@ -1,13 +1,17 @@
 #pragma once
 
 #include <boost/asio.hpp>
+#include <chrono>
 #include <memory>
+#include <string>
+#include <string_view>
 
 #include "beast_connection_pool.hpp"
 #include "client_ssl_ctx.hpp"
 #include "http_client_config_provider.hpp"
 #include "http_session.hpp"
 #include "http_session_pooled.hpp"
+#include "proxy_pool.hpp"
 
 namespace asio = boost::asio;
 
@@ -17,18 +21,26 @@ class HttpClientManager {
  private:
   std::unique_ptr<asio::io_context> ioc;
   cjj365::ClientSSLContext& client_ssl_ctx;
-  int threads_;
+  int threads_{0};
   std::vector<std::thread> thread_pool;
   std::unique_ptr<
       boost::asio::executor_work_guard<boost::asio::io_context::executor_type>>
       work_guard;
   std::unique_ptr<beast_pool::ConnectionPool> pool_;
   std::atomic<bool> stopped_{false};
+  std::unique_ptr<ProxyPool> proxy_pool_;
+  std::string profile_name_;
 
  public:
   HttpClientManager(cjj365::ClientSSLContext& ctx,
-                    cjj365::IHttpclientConfigProvider& config_provider)
-      : client_ssl_ctx(ctx), threads_(config_provider.get().get_threads_num()) {
+                    cjj365::IHttpclientConfigProvider& config_provider,
+                    std::string_view profile = {})
+      : client_ssl_ctx(ctx) {
+    profile_name_ = profile.empty()
+                        ? std::string(config_provider.default_name())
+                        : std::string(profile);
+    const auto& cfg = config_provider.get(profile_name_);
+    threads_ = cfg.get_threads_num();
     ioc = std::make_unique<asio::io_context>(threads_);
     work_guard = std::make_unique<boost::asio::executor_work_guard<
         boost::asio::io_context::executor_type>>(
@@ -36,6 +48,7 @@ class HttpClientManager {
     // Initialize a shared connection pool (defaults are fine; can be extended)
     pool_ = std::make_unique<beast_pool::ConnectionPool>(
         *ioc, beast_pool::PoolConfig{}, &client_ssl_ctx.context());
+    proxy_pool_ = std::make_unique<ProxyPool>(config_provider, profile_name_);
     for (size_t i = 0; i < threads_; ++i) {
       thread_pool.emplace_back([this] { ioc->run(); });
     }
@@ -53,6 +66,33 @@ class HttpClientManager {
       }
     }
   }
+
+  const cjj365::ProxySetting* borrow_proxy() {
+    if (!proxy_pool_) {
+      return nullptr;
+    }
+    return proxy_pool_->next();
+  }
+
+  void blacklist_proxy(const cjj365::ProxySetting& proxy,
+                       std::chrono::seconds timeout =
+                           std::chrono::seconds{300}) {
+    if (proxy_pool_) {
+      proxy_pool_->blacklist(proxy, timeout);
+    }
+  }
+
+  void reset_proxy_blacklist() {
+    if (proxy_pool_) {
+      proxy_pool_->reset_blacklist();
+    }
+  }
+
+  bool has_proxy_pool() const {
+    return proxy_pool_ && !proxy_pool_->empty();
+  }
+
+  std::string_view profile_name() const { return profile_name_; }
   template <class RequestBody, class ResponseBody>
   void http_request(
       const urls::url_view& url_input,

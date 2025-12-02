@@ -13,6 +13,7 @@
 #include <mutex>
 #include <unordered_map>
 #include <vector>
+#include <string_view>
 
 #include "http_client_config_provider.hpp"
 namespace logging = boost::log;
@@ -95,8 +96,9 @@ class ProxyPool {
   logsrc::severity_logger<trivial::severity_level> lg;
 
  public:
-  ProxyPool(cjj365::IHttpclientConfigProvider& config_provider)
-      : proxies_(config_provider.get().get_proxy_pool()) {}
+  ProxyPool(cjj365::IHttpclientConfigProvider& config_provider,
+            std::string_view profile = {})
+      : proxies_(select_proxies(config_provider, profile)) {}
 
   // empty could also mean disabled.
   bool empty() {
@@ -147,6 +149,10 @@ class ProxyPool {
     BOOST_LOG_SEV(lg, trivial::info) << "Blacklist cleared";
   }
 
+  const std::vector<cjj365::ProxySetting>& entries() const {
+    return proxies_;
+  }
+
  private:
   bool is_blacklisted(const cjj365::ProxySetting& proxy) {
     auto it = blacklist_.find(proxy);
@@ -166,6 +172,13 @@ class ProxyPool {
         ++it;
       }
     }
+  }
+  static const std::vector<cjj365::ProxySetting>& select_proxies(
+      cjj365::IHttpclientConfigProvider& provider,
+      std::string_view profile) {
+    const auto& cfg = profile.empty() ? provider.get()
+                                      : provider.get(profile);
+    return cfg.get_proxy_pool();
   }
 };
 }  // namespace client_async

@@ -1,12 +1,14 @@
 #pragma once
 
 #include <algorithm>
+#include <array>
 #include <boost/asio/io_context.hpp>
 #include <boost/asio/ssl.hpp>
 #include <boost/asio/ssl/context.hpp>
 #include <boost/json.hpp>
 #include <cstdint>
 #include <string>
+#include <string_view>
 #include <thread>
 #include <unordered_map>
 #include <vector>
@@ -220,10 +222,15 @@ class IHttpclientConfigProvider {
   virtual ~IHttpclientConfigProvider() = default;
 
   virtual const HttpclientConfig& get() const = 0;
+  virtual const HttpclientConfig& get(std::string_view name) const = 0;
+  virtual std::vector<std::string> names() const = 0;
+  virtual std::string_view default_name() const = 0;
 };
 
 class HttpclientConfigProviderFile : public IHttpclientConfigProvider {
-  HttpclientConfig config_;
+  std::unordered_map<std::string, HttpclientConfig> configs_;
+  std::vector<std::string> ordered_names_;
+  std::string default_name_;
 
  public:
   explicit HttpclientConfigProviderFile(cjj365::AppProperties& app_properties,
@@ -234,13 +241,81 @@ class HttpclientConfigProviderFile : public IHttpclientConfigProvider {
                                r.error().what);
     } else {
       json::value jv = r.value();
-  jsonutil::substitue_envs(jv, config_sources.cli_overrides(),
-           app_properties.properties);
-      config_ = json::value_to<HttpclientConfig>(std::move(jv));
+      jsonutil::substitue_envs(jv, config_sources.cli_overrides(),
+                               app_properties.properties);
+      parse_configs(jv);
     }
   }
 
-  const HttpclientConfig& get() const { return config_; }
+  const HttpclientConfig& get() const override {
+    return configs_.at(default_name_);
+  }
+
+  const HttpclientConfig& get(std::string_view name) const override {
+    auto it = configs_.find(std::string(name));
+    if (it == configs_.end()) {
+      throw std::out_of_range("Unknown httpclient config profile: " +
+                              std::string(name));
+    }
+    return it->second;
+  }
+
+  std::vector<std::string> names() const override { return ordered_names_; }
+
+  std::string_view default_name() const override { return default_name_; }
+
+ private:
+  void parse_configs(const json::value& jv) {
+    if (!jv.is_object()) {
+      throw std::invalid_argument(
+          "Httpclient config root must be an object (map of profiles).");
+    }
+
+    const auto& root = jv.as_object();
+    if (looks_like_single_config(root)) {
+      configs_.emplace("default", json::value_to<HttpclientConfig>(jv));
+      ordered_names_.push_back("default");
+      default_name_ = "default";
+      return;
+    }
+
+    for (const auto& kv : root) {
+      if (!kv.value().is_object()) {
+        throw std::invalid_argument(
+            "Each httpclient config entry must be an object.");
+      }
+      const std::string key = kv.key_c_str();
+      if (configs_.count(key) > 0) {
+        throw std::invalid_argument("Duplicate httpclient config entry: " +
+                                    key);
+      }
+      configs_.emplace(key, json::value_to<HttpclientConfig>(kv.value()));
+      ordered_names_.push_back(key);
+    }
+
+    if (configs_.empty()) {
+      throw std::invalid_argument("No httpclient configurations provided.");
+    }
+
+    auto it = configs_.find("default");
+    if (it != configs_.end()) {
+      default_name_ = it->first;
+    } else {
+      default_name_ = ordered_names_.front();
+    }
+  }
+
+  static bool looks_like_single_config(const json::object& jo) {
+    static constexpr std::array<std::string_view, 6> known_keys = {
+        "threads_num",    "ssl_method",     "verify_paths",
+        "certificates",   "certificate_files", "proxy_pool"};
+    for (auto key : known_keys) {
+      if (jo.if_contains(key.data())) {
+        return true;
+      }
+    }
+    return false;
+  }
 };
 
 }  // namespace cjj365
