@@ -39,6 +39,7 @@ target_link_libraries(
     PRIVATE GTest::gtest GTest::gtest_main GTest::gmock GTest::gmock_main
     PUBLIC
         Boost::json
+        ryml::ryml
 )
 
 add_test(
@@ -57,10 +58,14 @@ add_test(
 # ----------------------------config_sources_yaml_test.cpp------------------------------
 set(T_CFG_YAML config_sources_yaml_test)
 add_executable(${T_CFG_YAML} config_sources_yaml_test.cpp)
+target_include_directories(${T_CFG_YAML}
+    PUBLIC ${CMAKE_SOURCE_DIR}/include
+    PRIVATE ./include
+)
 target_link_libraries(${T_CFG_YAML}
-        PUBLIC GTest::gtest GTest::gtest_main
-        PRIVATE http_client prjutil
-        PUBLIC Boost::json
+    PUBLIC GTest::gtest GTest::gtest_main
+    PUBLIC Boost::json
+    PUBLIC ryml::ryml
 )
 
 # Mark as network-dependent and optionally disable via env flag
@@ -104,6 +109,7 @@ find_package(Boost REQUIRED COMPONENTS iostreams)
 find_package(Boost REQUIRED COMPONENTS log)
 find_package(Boost REQUIRED COMPONENTS log_setup)
 find_package(date CONFIG REQUIRED)
+find_package(ryml CONFIG REQUIRED)
 
 find_package(PkgConfig REQUIRED)
 
