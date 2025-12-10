@@ -13,7 +13,17 @@
 #include <map>
 #include <ostream>
 #include <sstream>
+#include <string>
 #include <vector>
+#include <optional>
+#include <unordered_map>
+#include <cstdlib>
+#include <cctype>
+#ifndef RYML_HEADER_ONLY
+#define RYML_HEADER_ONLY 1
+#endif
+#include <ryml/ryml.hpp>
+#include <ryml/ryml_std.hpp>
 
 #include "env_file_parser.hpp"
 #include "result_monad.hpp"
@@ -56,9 +66,9 @@ struct ConfigSources {
   std::vector<fs::path> paths_;
   std::vector<std::string> profiles;
   // application_json is the final fallback of configuration.
-  // appplication.json is read first, then application.{profile}.json,
-  // value from application.json will be overridden by values from
-  // application.{profile}.json.
+  // application.{json,yaml} are read first, then application.{profile}.{json,yaml},
+  // and values are overridden by later layers. application.override.{json,yaml}
+  // is last.
   std::optional<json::value> application_json;
   std::map<std::string, std::string> cli_overrides_;
   std::map<std::string, std::string> env_overrides_;
@@ -111,75 +121,32 @@ struct ConfigSources {
           "ConfigSources paths_ cannot be empty, forget to bind the "
           "ConfigSources in DI?");
     }
-    auto deep_merge = [](json::value& dst, const json::value& src,
-                         const auto& self_ref) -> void {
-      if (!dst.is_object() || !src.is_object()) return;
-      for (auto const& kv : src.as_object()) {
-        auto const& key = kv.key();
-        auto const& val = kv.value();
-        if (val.is_object()) {
-          if (auto* existing = dst.as_object().if_contains(key)) {
-            if (existing->is_object()) {
-              json::value& sub = dst.as_object()[key];
-              self_ref(sub, val, self_ref);
-              continue;
-            }
-          }
-          dst.as_object()[key] = val;  // replace non-object with object
-        } else {
-          // overwrite scalars / arrays
-          dst.as_object()[key] = val;
-        }
-      }
-    };
-    // try to load application.json
-    std::vector<fs::path> ordered_app_json_paths;
-    for (const auto& path : this->paths_) {
-      // add application.json if exists
-      fs::path app_json_path = path / "application.json";
-      if (fs::exists(app_json_path)) {
-        ordered_app_json_paths.push_back(app_json_path);
-      }
-      // add application.{profile}.json if exists
+    auto append_layers = [this](const fs::path& root, const std::string& base,
+                                std::vector<fs::path>& out) {
+      out.push_back(root / (base + ".json"));
+      out.push_back(root / (base + ".yaml"));
+      out.push_back(root / (base + ".yml"));
       for (const auto& profile : this->profiles) {
-        fs::path profile_app_json_path =
-            path / ("application." + profile + ".json");
-        if (fs::exists(profile_app_json_path)) {
-          ordered_app_json_paths.push_back(profile_app_json_path);
-        }
+        out.push_back(root / (base + "." + profile + ".json"));
+        out.push_back(root / (base + "." + profile + ".yaml"));
+        out.push_back(root / (base + "." + profile + ".yml"));
       }
-      fs::path override_path = path / "application.override.json";
-      if (fs::exists(override_path)) {
-        ordered_app_json_paths.push_back(override_path);
-      }
+      out.push_back(root / (base + ".override.json"));
+      out.push_back(root / (base + ".override.yaml"));
+      out.push_back(root / (base + ".override.yml"));
+    };
+
+    std::vector<fs::path> ordered_app_paths;
+    for (const auto& path : this->paths_) {
+      append_layers(path, "application", ordered_app_paths);
     }
-    // process ordered_app_json_paths
-    for (const auto& app_json_path : ordered_app_json_paths) {
-      if (fs::exists(app_json_path) && fs::is_regular_file(app_json_path)) {
-        std::ifstream ifs(app_json_path);
-        if (ifs.is_open()) {
-          std::string content((std::istreambuf_iterator<char>(ifs)),
-                              std::istreambuf_iterator<char>());
-          ifs.close();
-          boost::system::error_code ec;
-          json::value jv = json::parse(content, ec);
-          if (!ec) {
-            if (application_json) {
-              // deep merge into existing
-              deep_merge(*application_json, jv, deep_merge);
-            } else {
-              application_json = jv;
-            }
-          } else {
-            std::cerr << "Failed to parse " << app_json_path << ": "
-                      << ec.message() << std::endl;
-          }
-        } else {
-          std::cerr << "Failed to open " << app_json_path << std::endl;
-        }
+    for (const auto& app_path : ordered_app_paths) {
+      auto jv_opt = parse_file_to_json(app_path);
+      if (!jv_opt) continue;
+      if (application_json) {
+        deep_merge_json(*application_json, *jv_opt);
       } else {
-        std::cerr << "File does not exist or is not a regular file: "
-                  << app_json_path << std::endl;
+        application_json = *jv_opt;
       }
     }
   }
@@ -208,90 +175,7 @@ struct ConfigSources {
     }
   }
 
-  monad::MyResult<json::value> json_content(const std::string& filename) const {
-    // std::string content;
-    std::vector<fs::path> ordered_paths;
-    for (const auto& path : paths_) {
-      // DEBUG_PRINT("checking: " << path / (filename + ".json"));
-      // check for {filename}.json
-      if (fs::exists(path / (filename + ".json"))) {
-        ordered_paths.push_back(path / (filename + ".json"));
-      }
-      // check for {filename}.{profile}.json
-      for (const auto& profile : profiles) {
-        fs::path full_path = path / (filename + "." + profile + ".json");
-        // DEBUG_PRINT("checking: " << full_path);
-        if (fs::exists(full_path)) {
-          ordered_paths.push_back(full_path);
-        }
-      }
-      auto override_path = path / (filename + ".override.json");
-      if (fs::exists(override_path)) {
-        ordered_paths.push_back(override_path);
-      }
-    }
-    // process ordered_paths, merge content instead of replacing
-    json::value merged_json = json::object{};
-    if (application_json) {
-      if (auto* a_p = application_json->if_object()) {
-        if (auto* f_p = a_p->if_contains(filename)) {
-          if (f_p->is_object()) {
-            merged_json = *f_p;  // seed with base
-          }
-        }
-      }
-    }
-    auto deep_merge = [](json::value& dst, const json::value& src,
-                         const auto& self_ref) -> void {
-      if (!dst.is_object() || !src.is_object()) return;
-      for (auto const& kv : src.as_object()) {
-        auto const& key = kv.key();
-        auto const& val = kv.value();
-        if (val.is_object()) {
-          if (auto* existing = dst.as_object().if_contains(key)) {
-            if (existing->is_object()) {
-              json::value& sub = dst.as_object()[key];
-              self_ref(sub, val, self_ref);
-              continue;
-            }
-          }
-          dst.as_object()[key] = val;
-        } else {
-          dst.as_object()[key] = val;  // override scalar/array
-        }
-      }
-    };
-    for (const auto& path : ordered_paths) {
-      if (fs::exists(path) && fs::is_regular_file(path)) {
-        std::ifstream ifs(path);
-        if (ifs.is_open()) {
-          std::string content{(std::istreambuf_iterator<char>(ifs)),
-                              std::istreambuf_iterator<char>()};
-          ifs.close();
-          json::value jv = json::parse(content);
-          if (jv.is_object()) {
-            if (!merged_json.is_object()) merged_json = json::object{};
-            deep_merge(merged_json, jv, deep_merge);
-          } else {
-            std::cerr << "Failed to open " << path << std::endl;
-          }
-        } else {
-          std::cerr << "File does not exist or is not a regular file: " << path
-                    << std::endl;
-        }
-      }
-    }
-    if (merged_json.is_object() && !merged_json.as_object().empty()) {
-      return monad::MyResult<json::value>::Ok(merged_json);
-    }
-    std::ostringstream oss;
-    for (auto& path : paths_) {
-      oss << "Failed to find JSON file in: " << fs::absolute(path) << std::endl;
-    }
-    std::string error_msg = "Failed to find JSON file: " + filename + ", in: " + oss.str();
-    return monad::MyResult<json::value>::Err(
-        monad::Error{5019, std::move(error_msg)});
-  }
+  monad::MyResult<json::value> json_content(const std::string& filename) const;
 
   monad::MyResult<cjj365::LoggingConfig> logging_config() const {
     return json_content("log_config")
@@ -306,8 +190,254 @@ struct ConfigSources {
           }
         });
   }
+
+ private:
+  static json::value yaml_to_json(const std::string& content,
+                                  const fs::path& origin);
+  static void deep_merge_json(json::value& dst, const json::value& src);
+  static void expand_env(json::value& v);
+  static std::optional<json::value> parse_file_to_json(const fs::path& p);
 };
 
+inline bool is_number(const std::string& s) {
+  if (s.empty()) return false;
+  size_t i = (s[0] == '-' || s[0] == '+') ? 1 : 0;
+  if (i >= s.size()) return false;
+  for (; i < s.size(); ++i) {
+    if (!std::isdigit(static_cast<unsigned char>(s[i]))) return false;
+  }
+  return true;
+}
+
+inline json::value ConfigSources::yaml_to_json(const std::string& content,
+                                               const fs::path& origin) {
+  auto tree = ryml::parse_in_arena(ryml::to_csubstr(content));
+  ryml::ConstNodeRef root = tree.rootref();
+  std::function<json::value(ryml::ConstNodeRef)> convert =
+      [&](ryml::ConstNodeRef n) -> json::value {
+    if (n.is_seq()) {
+      json::array arr;
+      for (auto ch : n.children()) {
+        arr.push_back(convert(ch));
+      }
+      return arr;
+    }
+    if (n.is_map()) {
+      json::object obj;
+      for (auto ch : n.children()) {
+        std::string key(ch.key().str, ch.key().len);
+        json::value val;
+        if (ch.is_map() || ch.is_seq()) {
+          val = convert(ch);
+        } else if (ch.has_val()) {
+          std::string sval(ch.val().str, ch.val().len);
+          if (sval == "true" || sval == "True") {
+            val = true;
+          } else if (sval == "false" || sval == "False") {
+            val = false;
+          } else if (is_number(sval)) {
+            try {
+              val = static_cast<int64_t>(std::stoll(sval));
+            } catch (...) {
+              val = sval;
+            }
+          } else {
+            try {
+              size_t idx = 0;
+              double d = std::stod(sval, &idx);
+              if (idx == sval.size()) {
+                val = d;
+              } else {
+                val = sval;
+              }
+            } catch (...) {
+              val = sval;
+            }
+          }
+        } else {
+          val = json::value();  // null
+        }
+        obj[key] = std::move(val);
+      }
+      return obj;
+    }
+    if (n.has_val()) {
+      std::string sval(n.val().str, n.val().len);
+      if (sval == "true" || sval == "True") return json::value(true);
+      if (sval == "false" || sval == "False") return json::value(false);
+      if (is_number(sval)) {
+        try {
+          return json::value(static_cast<int64_t>(std::stoll(sval)));
+        } catch (...) {
+        }
+      }
+      try {
+        size_t idx = 0;
+        double d = std::stod(sval, &idx);
+        if (idx == sval.size()) return json::value(d);
+      } catch (...) {
+      }
+      return json::value(sval);
+    }
+    return json::value();
+  };
+
+  try {
+    return convert(root);
+  } catch (const std::exception& e) {
+    std::cerr << "Failed to convert YAML from " << origin << ": " << e.what()
+              << std::endl;
+    throw;
+  }
+}
+
+inline void ConfigSources::deep_merge_json(json::value& dst,
+                                           const json::value& src) {
+  if (!dst.is_object() || !src.is_object()) return;
+  for (auto const& kv : src.as_object()) {
+    auto const& key = kv.key();
+    auto const& val = kv.value();
+    if (val.is_object()) {
+      if (auto* existing = dst.as_object().if_contains(key)) {
+        if (existing->is_object()) {
+          json::value& sub = dst.as_object()[key];
+          deep_merge_json(sub, val);
+          continue;
+        }
+      }
+      dst.as_object()[key] = val;  // replace non-object with object
+    } else {
+      // overwrite scalars / arrays
+      dst.as_object()[key] = val;
+    }
+  }
+}
+
+inline std::string expand_env_in_string(const std::string& in) {
+  std::string out;
+  out.reserve(in.size());
+  for (size_t i = 0; i < in.size();) {
+    if (in[i] == '$' && i + 1 < in.size() && in[i + 1] == '{') {
+      size_t end = in.find('}', i + 2);
+      if (end != std::string::npos) {
+        std::string var = in.substr(i + 2, end - (i + 2));
+        const char* val = std::getenv(var.c_str());
+        if (val) {
+          out.append(val);
+        } else {
+          // leave placeholder intact if env missing
+          out.append(in.substr(i, end - i + 1));
+        }
+        i = end + 1;
+        continue;
+      }
+    }
+    out.push_back(in[i]);
+    ++i;
+  }
+  return out;
+}
+
+inline void ConfigSources::expand_env(json::value& v) {
+  if (v.is_object()) {
+    for (auto& kv : v.as_object()) {
+      expand_env(kv.value());
+    }
+  } else if (v.is_array()) {
+    for (auto& item : v.as_array()) {
+      expand_env(item);
+    }
+  } else if (v.is_string()) {
+    auto s = v.as_string();
+    std::string replaced = expand_env_in_string(std::string(s));
+    v = replaced;
+  }
+}
+
+inline std::optional<json::value> ConfigSources::parse_file_to_json(
+    const fs::path& p) {
+  if (!fs::exists(p) || !fs::is_regular_file(p)) return std::nullopt;
+  std::ifstream ifs(p);
+  if (!ifs.is_open()) return std::nullopt;
+  std::string content((std::istreambuf_iterator<char>(ifs)),
+                      std::istreambuf_iterator<char>());
+  ifs.close();
+  try {
+    auto ext = p.extension().string();
+    if (ext == ".yaml" || ext == ".yml") {
+      return yaml_to_json(content, p);
+    }
+    boost::system::error_code ec;
+    json::value jv = json::parse(content, ec);
+    if (ec) {
+      std::cerr << "Failed to parse JSON " << p << ": " << ec.message()
+                << std::endl;
+      return std::nullopt;
+    }
+    return jv;
+  } catch (const std::exception& e) {
+    std::cerr << "Failed to parse config file " << p << ": " << e.what()
+              << std::endl;
+    return std::nullopt;
+  }
+}
+
+inline monad::MyResult<json::value> ConfigSources::json_content(
+    const std::string& filename) const {
+  std::vector<fs::path> ordered_paths;
+  auto append_layers = [this](const fs::path& root, const std::string& base,
+                              std::vector<fs::path>& out) {
+    out.push_back(root / (base + ".json"));
+    out.push_back(root / (base + ".yaml"));
+    out.push_back(root / (base + ".yml"));
+    for (const auto& profile : this->profiles) {
+      out.push_back(root / (base + "." + profile + ".json"));
+      out.push_back(root / (base + "." + profile + ".yaml"));
+      out.push_back(root / (base + "." + profile + ".yml"));
+    }
+    out.push_back(root / (base + ".override.json"));
+    out.push_back(root / (base + ".override.yaml"));
+    out.push_back(root / (base + ".override.yml"));
+  };
+
+  for (const auto& path : paths_) {
+    append_layers(path, filename, ordered_paths);
+  }
+
+  json::value merged_json = json::object{};
+  if (application_json) {
+    if (auto* a_p = application_json->if_object()) {
+      if (auto* f_p = a_p->if_contains(filename)) {
+        if (f_p->is_object()) {
+          merged_json = *f_p;
+        }
+      }
+    }
+  }
+
+  for (const auto& path : ordered_paths) {
+    auto jv_opt = parse_file_to_json(path);
+    if (!jv_opt) continue;
+    if (!merged_json.is_object()) merged_json = json::object{};
+    deep_merge_json(merged_json, *jv_opt);
+  }
+
+  if (merged_json.is_object() && !merged_json.as_object().empty()) {
+    json::value copy = merged_json;
+    expand_env(copy);
+    return monad::MyResult<json::value>::Ok(copy);
+  }
+
+  std::ostringstream oss;
+  for (auto& path : paths_) {
+    oss << "Failed to find config for '" << filename
+        << "' in: " << fs::absolute(path) << std::endl;
+  }
+  std::string error_msg =
+      "Failed to find config file: " + filename + ", in: " + oss.str();
+  return monad::MyResult<json::value>::Err(
+      monad::Error{5019, std::move(error_msg)});
+}
 /*
  AppProperties — layered .properties loader with deterministic merge order
 

@@ -24,44 +24,62 @@ add_test(
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 
 # ----------------------------config_sources_test.cpp------------------------------
-set(T_NAME config_sources_test)
-add_executable(${T_NAME}
+set(T_CFG config_sources_test)
+add_executable(${T_CFG}
     config_sources_test.cpp
 )
 
-target_include_directories(${T_NAME}
+target_include_directories(${T_CFG}
     PUBLIC ${CMAKE_SOURCE_DIR}/include
     PRIVATE ./include
 )
 
 target_link_libraries(
-    ${T_NAME}
+    ${T_CFG}
     PRIVATE GTest::gtest GTest::gtest_main GTest::gmock GTest::gmock_main
     PUBLIC
         Boost::json
 )
 
 add_test(
-        NAME ${T_NAME}.merge
-        COMMAND ${T_NAME} --gtest_filter=ConfigSourcesTest.JsonOverrideMergingWorks
+        NAME ${T_CFG}.merge
+        COMMAND ${T_CFG} --gtest_filter=ConfigSourcesTest.JsonOverrideMergingWorks
         WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 
 add_test(
-        NAME ${T_NAME}.missing
-        COMMAND ${T_NAME} --gtest_filter=ConfigSourcesTest.MissingJsonReturnsError
+        NAME ${T_CFG}.missing
+        COMMAND ${T_CFG} --gtest_filter=ConfigSourcesTest.MissingJsonReturnsError
         WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 add_test(
-        NAME ${T_NAME}.cli_overrides
-        COMMAND ${T_NAME} --gtest_filter=ConfigSourcesTest.CliOverridesPropagateToAppProperties
+        NAME ${T_CFG}.cli_overrides
+        COMMAND ${T_CFG} --gtest_filter=ConfigSourcesTest.CliOverridesPropagateToAppProperties
         WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+# ----------------------------config_sources_yaml_test.cpp------------------------------
+set(T_CFG_YAML config_sources_yaml_test)
+add_executable(${T_CFG_YAML} config_sources_yaml_test.cpp)
+target_link_libraries(${T_CFG_YAML}
+        PUBLIC GTest::gtest GTest::gtest_main
+        PRIVATE http_client prjutil
+        PUBLIC Boost::json
+)
+
 # Mark as network-dependent and optionally disable via env flag
-set_tests_properties(${T_NAME}.merge PROPERTIES LABELS "network")
-set_tests_properties(${T_NAME}.missing PROPERTIES LABELS "network")
-set_tests_properties(${T_NAME}.cli_overrides PROPERTIES LABELS "network")
+add_test(
+        NAME ${T_CFG_YAML}.yaml_merge
+        COMMAND ${T_CFG_YAML} --gtest_filter=ConfigSourcesYamlTest.YamlJsonMixedMergeAndEnvExpansion
+        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+set_tests_properties(${T_CFG_YAML}.yaml_merge PROPERTIES LABELS "network")
 if("$ENV{HTTPCLIENT_SKIP_NETWORK_TESTS}" STREQUAL "1")
-    set_tests_properties(${T_NAME}.merge PROPERTIES DISABLED TRUE)
-    set_tests_properties(${T_NAME}.missing PROPERTIES DISABLED TRUE)
-    set_tests_properties(${T_NAME}.cli_overrides PROPERTIES DISABLED TRUE)
+    set_tests_properties(${T_CFG_YAML}.yaml_merge PROPERTIES DISABLED TRUE)
+endif()
+# Mark as network-dependent and optionally disable via env flag
+set_tests_properties(${T_CFG}.merge PROPERTIES LABELS "network")
+set_tests_properties(${T_CFG}.missing PROPERTIES LABELS "network")
+set_tests_properties(${T_CFG}.cli_overrides PROPERTIES LABELS "network")
+if("$ENV{HTTPCLIENT_SKIP_NETWORK_TESTS}" STREQUAL "1")
+    set_tests_properties(${T_CFG}.merge PROPERTIES DISABLED TRUE)
+    set_tests_properties(${T_CFG}.missing PROPERTIES DISABLED TRUE)
+    set_tests_properties(${T_CFG}.cli_overrides PROPERTIES DISABLED TRUE)
 endif()
 #
 # unit tests:
