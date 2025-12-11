@@ -195,7 +195,9 @@ struct ConfigSources {
   static json::value yaml_to_json(const std::string& content,
                                   const fs::path& origin);
   static void deep_merge_json(json::value& dst, const json::value& src);
-  static void expand_env(json::value& v);
+  void expand_env(json::value& v) const;
+  std::optional<std::string> resolve_env_var(const std::string& key) const;
+  std::string expand_env_in_string(const std::string& in) const;
   static std::optional<json::value> parse_file_to_json(const fs::path& p);
 };
 
@@ -313,7 +315,22 @@ inline void ConfigSources::deep_merge_json(json::value& dst,
   }
 }
 
-inline std::string expand_env_in_string(const std::string& in) {
+inline std::optional<std::string> ConfigSources::resolve_env_var(
+    const std::string& key) const {
+  if (auto it = env_overrides_.find(key); it != env_overrides_.end()) {
+    return it->second;
+  }
+  if (auto it = cli_overrides_.find(key); it != cli_overrides_.end()) {
+    return it->second;
+  }
+  if (const char* val = std::getenv(key.c_str())) {
+    return std::string(val);
+  }
+  return std::nullopt;
+}
+
+inline std::string ConfigSources::expand_env_in_string(
+    const std::string& in) const {
   std::string out;
   out.reserve(in.size());
   for (size_t i = 0; i < in.size();) {
@@ -321,11 +338,9 @@ inline std::string expand_env_in_string(const std::string& in) {
       size_t end = in.find('}', i + 2);
       if (end != std::string::npos) {
         std::string var = in.substr(i + 2, end - (i + 2));
-        const char* val = std::getenv(var.c_str());
-        if (val) {
-          out.append(val);
+        if (auto resolved = resolve_env_var(var)) {
+          out.append(*resolved);
         } else {
-          // leave placeholder intact if env missing
           out.append(in.substr(i, end - i + 1));
         }
         i = end + 1;
@@ -338,7 +353,7 @@ inline std::string expand_env_in_string(const std::string& in) {
   return out;
 }
 
-inline void ConfigSources::expand_env(json::value& v) {
+inline void ConfigSources::expand_env(json::value& v) const {
   if (v.is_object()) {
     for (auto& kv : v.as_object()) {
       expand_env(kv.value());
@@ -596,6 +611,8 @@ struct AppProperties {
     for (const auto& [key, value] : config_sources.cli_overrides()) {
       properties[key] = value;
     }
+
+    config_sources_.merge_env_overrides(properties);
   }
 };
 
