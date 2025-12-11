@@ -556,14 +556,14 @@ TEST(HttpClientTest, GetOnly) {
         });
   }
   notifier.waitForNotification();
-  EXPECT_FALSE(response_body_r->is_err()) << response_body_r->error();
+  ASSERT_FALSE(response_body_r->is_err()) << response_body_r->error();
 
   json::value jv = json::parse(response_body_r->value());
-  EXPECT_TRUE(jv.as_object().contains("args"))
+  ASSERT_TRUE(jv.as_object().contains("args"))
       << "Response should contain 'args' field";
-  EXPECT_TRUE(jv.as_object().contains("headers"))
+  ASSERT_TRUE(jv.as_object().contains("headers"))
       << "Response should contain 'headers' field";
-  EXPECT_TRUE(jv.as_object().contains("url"))
+  ASSERT_TRUE(jv.as_object().contains("url"))
       << "Response should contain 'url' field";
   std::cout << "Response: " << jv << std::endl;
   http_client_->stop();
@@ -607,20 +607,20 @@ TEST(HttpClientTest, PostOnly) {
         });
   }
   notifier.waitForNotification();
-  EXPECT_FALSE(response_body_r->is_err()) << response_body_r->error();
+  ASSERT_FALSE(response_body_r->is_err()) << response_body_r->error();
   json::value jv = json::parse(response_body_r->value());
   std::cerr << "response body: " << jv << std::endl;
-  EXPECT_TRUE(jv.as_object().contains("args"))
+  ASSERT_TRUE(jv.as_object().contains("args"))
       << "Response should contain 'args' field";
-  EXPECT_TRUE(jv.as_object().contains("headers"))
+  ASSERT_TRUE(jv.as_object().contains("headers"))
       << "Response should contain 'headers' field";
-  EXPECT_TRUE(jv.as_object().contains("url"))
+  ASSERT_TRUE(jv.as_object().contains("url"))
       << "Response should contain 'url' field";
   // expect data
-  EXPECT_TRUE(jv.as_object().contains("data"))
+  ASSERT_TRUE(jv.as_object().contains("data"))
       << "Response should contain 'data' field";
   json::value data_jv = json::parse(jv.as_object()["data"].as_string().c_str());
-  EXPECT_EQ(data_jv.as_object()["key"].as_string(), "value")
+  ASSERT_EQ(data_jv.as_object()["key"].as_string(), "value")
       << "Response data should match the sent JSON body";
   std::cout << "Response: " << jv << std::endl;
   http_client_->stop();
