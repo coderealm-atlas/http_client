@@ -111,5 +111,65 @@ override_me: final
   fs::remove_all(root, ec);
 }
 
+TEST(ConfigSourcesYamlTest, YamlMergeKeyAndQuotedScalar) {
+  fs::path root = make_temp_dir("configsources_yaml_merge");
+
+  // per-module YAML using anchors + merge key
+  write_file(root / "redis_config.yaml",
+             R"(
+default: &base
+  host: localhost
+  port: "6379"
+  username: ""
+  password: ""
+  auth_enabled: false
+  use_ssl: false
+  ca_str: ""
+  cert_str: ""
+  cert_key_str: ""
+  unix_socket: ""
+  username_socket: ""
+  password_socket: ""
+  exec_timeout: 5
+  conn_timeout: 10
+  health_check_interval: 2
+  reconnect_wait_interval: 1
+  logging_level: info
+  logging_prefix: bbserver
+
+presence:
+  <<: *base
+  logging_prefix: presence
+)");
+
+  cjj365::ConfigSources sources({root}, {});
+  auto res = sources.json_content("redis_config");
+  ASSERT_TRUE(res.is_ok()) << "Expected Ok, got error: " << res.error().what;
+
+  auto jv = res.value();
+  ASSERT_TRUE(jv.is_object());
+  auto& jo = jv.as_object();
+  ASSERT_TRUE(jo.at("default").is_object());
+  ASSERT_TRUE(jo.at("presence").is_object());
+
+  auto& def = jo.at("default").as_object();
+  auto& pres = jo.at("presence").as_object();
+
+  // quoted scalar should remain a string
+  ASSERT_TRUE(def.at("port").is_string());
+  EXPECT_EQ(def.at("port").as_string(), "6379");
+
+  // merge key should bring base keys into the derived map
+  EXPECT_EQ(pres.at("host").as_string(), "localhost");
+  ASSERT_TRUE(pres.at("port").is_string());
+  EXPECT_EQ(pres.at("port").as_string(), "6379");
+
+  // and overrides should still override
+  EXPECT_EQ(pres.at("logging_prefix").as_string(), "presence");
+
+  std::error_code ec;
+  fs::remove_all(root, ec);
+}
+
 }  // namespace
 

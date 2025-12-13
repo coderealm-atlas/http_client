@@ -215,12 +215,42 @@ inline json::value ConfigSources::yaml_to_json(const std::string& content,
                                                const fs::path& origin) {
   auto tree = ryml::parse_in_arena(ryml::to_csubstr(content));
   ryml::ConstNodeRef root = tree.rootref();
+  auto resolve_ref = [](ryml::ConstNodeRef n) -> ryml::ConstNodeRef {
+    if (!(n.is_ref() || n.is_val_ref() || n.is_key_ref())) return n;
+    auto const* t = n.tree();
+    if (!t) return n;
+
+    c4::csubstr ref;
+    if (n.is_val_ref()) {
+      ref = n.val_ref();
+    } else if (n.is_key_ref()) {
+      ref = n.key_ref();
+    } else {
+      // Fallback: try value ref first.
+      if (n.is_val_ref()) ref = n.val_ref();
+    }
+    if (ref.empty()) return n;
+
+    // Find the node which defines this anchor and return it.
+    // Note: ref nodes themselves store the ref name in the same field as anchors,
+    // so we must specifically look for anchor-defining nodes.
+    for (ryml::id_type i = 0; i < t->size(); ++i) {
+      if (t->has_val_anchor(i) && t->val_anchor(i) == ref) {
+        return t->cref(i);
+      }
+      if (t->has_key_anchor(i) && t->key_anchor(i) == ref) {
+        return t->cref(i);
+      }
+    }
+    return n;
+  };
   std::function<json::value(ryml::ConstNodeRef)> convert =
       [&](ryml::ConstNodeRef n) -> json::value {
+    n = resolve_ref(n);
     if (n.is_seq()) {
       json::array arr;
       for (auto ch : n.children()) {
-        arr.push_back(convert(ch));
+        arr.push_back(convert(resolve_ref(ch)));
       }
       return arr;
     }
@@ -228,12 +258,41 @@ inline json::value ConfigSources::yaml_to_json(const std::string& content,
       json::object obj;
       for (auto ch : n.children()) {
         std::string key(ch.key().str, ch.key().len);
+        auto chv = resolve_ref(ch);
+        // YAML merge key: `<<: *anchor` or `<<: [*a, *b]`
+        // Rapidyaml parses the referenced node; we must apply the merge.
+        if (key == "<<") {
+          try {
+            if (chv.is_seq()) {
+              for (auto entry : chv.children()) {
+                auto merged = convert(resolve_ref(entry));
+                json::value dstv = obj;
+                deep_merge_json(dstv, merged);
+                if (dstv.is_object()) obj = std::move(dstv.as_object());
+              }
+            } else if (chv.is_map()) {
+              auto merged = convert(chv);
+              json::value dstv = obj;
+              deep_merge_json(dstv, merged);
+              if (dstv.is_object()) obj = std::move(dstv.as_object());
+            } else {
+              // If we cannot resolve the merge value, ignore it.
+            }
+          } catch (...) {
+            // Ignore merge failures to avoid breaking config load.
+          }
+          continue;
+        }
+
         json::value val;
-        if (ch.is_map() || ch.is_seq()) {
-          val = convert(ch);
-        } else if (ch.has_val()) {
-          std::string sval(ch.val().str, ch.val().len);
-          if (sval == "true" || sval == "True") {
+        if (chv.is_map() || chv.is_seq()) {
+          val = convert(chv);
+        } else if (chv.has_val()) {
+          std::string sval(chv.val().str, chv.val().len);
+          if (chv.is_val_quoted()) {
+            // Preserve quoted scalars as strings (eg: port: "6379").
+            val = sval;
+          } else if (sval == "true" || sval == "True") {
             val = true;
           } else if (sval == "false" || sval == "False") {
             val = false;
@@ -265,6 +324,7 @@ inline json::value ConfigSources::yaml_to_json(const std::string& content,
     }
     if (n.has_val()) {
       std::string sval(n.val().str, n.val().len);
+      if (n.is_val_quoted()) return json::value(sval);
       if (sval == "true" || sval == "True") return json::value(true);
       if (sval == "false" || sval == "False") return json::value(false);
       if (is_number(sval)) {
