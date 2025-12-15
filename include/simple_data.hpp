@@ -377,14 +377,14 @@ inline void ConfigSources::deep_merge_json(json::value& dst,
 
 inline std::optional<std::string> ConfigSources::resolve_env_var(
     const std::string& key) const {
-  if (auto it = env_overrides_.find(key); it != env_overrides_.end()) {
-    return it->second;
-  }
   if (auto it = cli_overrides_.find(key); it != cli_overrides_.end()) {
     return it->second;
   }
   if (const char* val = std::getenv(key.c_str())) {
     return std::string(val);
+  }
+  if (auto it = env_overrides_.find(key); it != env_overrides_.end()) {
+    return it->second;
   }
   return std::nullopt;
 }
