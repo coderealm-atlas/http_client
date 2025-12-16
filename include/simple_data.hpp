@@ -381,7 +381,12 @@ inline std::optional<std::string> ConfigSources::resolve_env_var(
     return it->second;
   }
   if (const char* val = std::getenv(key.c_str())) {
-    return std::string(val);
+    // Treat empty environment variables as absent.
+    // This matches the intended precedence where application.*.properties can
+    // provide defaults unless the environment explicitly provides a value.
+    if (*val != '\0') {
+      return std::string(val);
+    }
   }
   if (auto it = env_overrides_.find(key); it != env_overrides_.end()) {
     return it->second;
