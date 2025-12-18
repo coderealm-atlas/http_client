@@ -2,14 +2,19 @@
 
 #include <boost/beast/http.hpp>
 #include <boost/beast/http/empty_body.hpp>
+#include <boost/beast/http/file_body.hpp>
 #include <boost/core/detail/string_view.hpp>
 #include <boost/json/serializer.hpp>
 #include <exception>
 #include <fmt/format.h>
+#include <algorithm>
+#include <cctype>
+#include <cstdlib>
 #include <memory>
 #include <optional>
 #include <string>
 #include <string_view>
+#include <vector>
 #include <type_traits>
 #include <utility>
 
@@ -395,6 +400,7 @@ struct TagTraits;
 struct GetStringTag {};  // Example tag
 struct GetStatusTag {};  // New tag
 struct PostJsonTag {};   // Another example tag
+struct GetFileTag {};    // Downloads response to file_body
 struct GetHeaderTag {};
 struct DeleteTag {};
 
@@ -402,6 +408,12 @@ template <>
 struct TagTraits<GetStringTag> {
   using Request = http::request<http::empty_body>;
   using Response = http::response<http::string_body>;
+};
+
+template <>
+struct TagTraits<GetFileTag> {
+  using Request = http::request<http::empty_body>;
+  using Response = http::response<http::file_body>;
 };
 
 template <>
@@ -468,6 +480,8 @@ ExchangeIOFor<Tag>
       make_exchange({http::verb::head, DEFAULT_TARGET, 11});
     } else if constexpr (std::is_same_v<Tag, GetStringTag>) {
       make_exchange({http::verb::get, DEFAULT_TARGET, 11});
+    } else if constexpr (std::is_same_v<Tag, GetFileTag>) {
+      make_exchange({http::verb::get, DEFAULT_TARGET, 11});
     } else if constexpr (std::is_same_v<Tag, DeleteTag>) {
       make_exchange({http::verb::delete_, DEFAULT_TARGET, 11});
     } else if constexpr (std::is_same_v<Tag, PostJsonTag>) {
@@ -490,42 +504,153 @@ auto http_request_io(HttpClientManager& pool, int verbose = 0) {
   return [&pool, verbose](ExchangePtr ex) {
     return monad::IO<ExchangePtr>([&pool, verbose,
                                    ex = std::move(ex)](auto cb) mutable {
+      auto trim = [](std::string_view s) {
+        while (!s.empty() && (s.front() == ' ' || s.front() == '\t' ||
+                              s.front() == '\n' || s.front() == '\r')) {
+          s.remove_prefix(1);
+        }
+        while (!s.empty() && (s.back() == ' ' || s.back() == '\t' ||
+                              s.back() == '\n' || s.back() == '\r')) {
+          s.remove_suffix(1);
+        }
+        return s;
+      };
+
+      auto to_lower = [](std::string_view s) {
+        std::string out{s};
+        std::transform(out.begin(), out.end(), out.begin(),
+                       [](unsigned char c) {
+                         return static_cast<char>(std::tolower(c));
+                       });
+        return out;
+      };
+
+      auto should_bypass_env_proxy_for_url = [&](const urls::url& url) {
+        const char* no_proxy_c = std::getenv("NO_PROXY");
+        if (!no_proxy_c || !*no_proxy_c) {
+          no_proxy_c = std::getenv("no_proxy");
+        }
+        if (!no_proxy_c || !*no_proxy_c) {
+          return false;
+        }
+
+        auto host_sv = url.host();
+        if (host_sv.empty()) {
+          return false;
+        }
+
+        const std::string host_lc = to_lower(host_sv);
+        std::string_view list{no_proxy_c};
+        while (!list.empty()) {
+          auto comma = list.find(',');
+          auto token = comma == std::string_view::npos ? list : list.substr(0, comma);
+          token = trim(token);
+
+          if (!token.empty()) {
+            if (token == "*") {
+              return true;
+            }
+
+            // Strip optional port in token (best-effort; minimal support).
+            // Examples: "example.com:8080" -> "example.com"
+            if (auto pos = token.rfind(':'); pos != std::string_view::npos) {
+              auto port_part = token.substr(pos + 1);
+              bool all_digits = !port_part.empty();
+              for (char c : port_part) {
+                if (c < '0' || c > '9') {
+                  all_digits = false;
+                  break;
+                }
+              }
+              if (all_digits) {
+                token = token.substr(0, pos);
+                token = trim(token);
+              }
+            }
+
+            const std::string token_lc = to_lower(token);
+            if (token_lc.empty()) {
+              // continue
+            } else if (host_lc == token_lc) {
+              return true;
+            } else {
+              // Suffix match:
+              // - token ".example.com" matches "a.example.com" (but not "example.com")
+              // - token "example.com" matches "example.com" and "a.example.com"
+              std::string_view suffix = token_lc;
+              bool require_dot = false;
+              if (!suffix.empty() && suffix.front() == '.') {
+                suffix.remove_prefix(1);
+                require_dot = true;
+              }
+
+              if (!suffix.empty() && host_lc.size() > suffix.size() &&
+                  host_lc.compare(host_lc.size() - suffix.size(), suffix.size(), suffix) == 0) {
+                const auto dot_pos = host_lc.size() - suffix.size();
+                if (!require_dot || (dot_pos > 0 && host_lc[dot_pos - 1] == '.')) {
+                  return true;
+                }
+              }
+            }
+          }
+
+          if (comma == std::string_view::npos) {
+            break;
+          }
+          list.remove_prefix(comma + 1);
+        }
+        return false;
+      };
+
+      HttpClientRequestParams request_params;
+      request_params.body_file = ex->body_file;
+      request_params.follow_redirect = ex->follow_redirect;
+      request_params.no_modify_req = ex->no_modify_req;
+      request_params.timeout = ex->timeout;
+
+      if (!ex->proxy && pool.has_proxy_pool()) {
+        ex->proxy = pool.borrow_proxy();
+      }
+
+      // If proxy is inherited from env, honor NO_PROXY for this request.
+      if (ex->proxy && ex->proxy->from_env && should_bypass_env_proxy_for_url(ex->url)) {
+        ex->proxy = nullptr;
+      }
+
+      auto req = ex->request;
       if (!ex->no_modify_req) {
-        ex->request.set(http::field::user_agent, BOOST_BEAST_VERSION_STRING);
-        // Set up an HTTP GET request message
-        std::string target = ex->url.path().empty() ? "/" : ex->url.path();
-        if (!ex->url.query().empty()) {
+        req.set(http::field::user_agent, BOOST_BEAST_VERSION_STRING);
+        std::string target = ex->url.encoded_path().empty()
+                                 ? "/"
+                                 : std::string(ex->url.encoded_path());
+        if (!ex->url.encoded_query().empty()) {
           target = fmt::format("{}?{}", target,
                                std::string(ex->url.encoded_query()));
         }
-        ex->request.target(target);
+        req.target(target);
       }
-      Req request_copy = ex->request;  // preserve original
-      if (verbose > 4) {               // trace
-        std::cerr << "Before request headers: " << request_copy.base()
-                  << std::endl;
+
+      if (verbose > 4) {  // trace
+        std::cerr << "Before request headers: " << req.base() << std::endl;
       }
-    HttpClientRequestParams request_params;
-    request_params.body_file = ex->body_file;
-    request_params.follow_redirect = ex->follow_redirect;
-    request_params.no_modify_req = ex->no_modify_req;
-    request_params.timeout = ex->timeout;
-    pool.http_request<typename Req::body_type, typename Res::body_type>(
-      ex->url, std::move(request_copy),
-      [cb = std::move(cb), ex](std::optional<Res> resp, int err) mutable {
+
+      pool.http_request<typename Req::body_type, typename Res::body_type>(
+          ex->url, std::move(req),
+          [cb = std::move(cb), ex](std::optional<Res> resp, int err) mutable {
             if (err == 0 && resp.has_value()) {
               ex->response = std::move(resp);
               cb(monad::Result<ExchangePtr, monad::Error>::Ok(std::move(ex)));
-            } else {
-              const auto url_view = ex->url.buffer();
-              BOOST_LOG_SEV(ex->lg, trivial::error)
-                  << "http_request_io failed with error num: " << err << ", url:  " << url_view;
-              cb(monad::Result<ExchangePtr, monad::Error>::Err(
-                  monad::Error{err, fmt::format("http_request_io failed, url: {}", url_view)}));
+              return;
             }
+
+            const auto url_view = ex->url.buffer();
+            BOOST_LOG_SEV(ex->lg, trivial::error)
+                << "http_request_io failed with error num: " << err
+                << ", url:  " << url_view;
+            cb(monad::Result<ExchangePtr, monad::Error>::Err(
+                monad::Error{err, fmt::format("http_request_io failed, url: {}", url_view)}));
           },
-          std::move(request_params),
-          ex->proxy);
+          HttpClientRequestParams{request_params}, ex->proxy);
     });
   };
 }

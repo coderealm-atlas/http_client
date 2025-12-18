@@ -100,6 +100,22 @@ class session {
   // Start the asynchronous operation
  public:
   void run() {
+    auto bracket_ipv6 = [](std::string_view host) -> std::string {
+      // url.host() yields the host without brackets. HTTP Host header and
+      // CONNECT authority require IPv6 literals to be bracketed.
+      if (host.empty()) return {};
+      if (host.front() == '[') return std::string(host);
+      if (host.find(':') != std::string_view::npos) {
+        std::string out;
+        out.reserve(host.size() + 2);
+        out.push_back('[');
+        out.append(host);
+        out.push_back(']');
+        return out;
+      }
+      return std::string(host);
+    };
+
     std::string_view port = this->url_.port();
     bool has_explicit_port = !port.empty();
     if (!has_explicit_port) {
@@ -108,10 +124,13 @@ class session {
     if (no_modify_req_) {
       return do_resolve(this->url_.host(), port);
     }
-    if (port.empty() || !has_explicit_port) {
-      req_.set(http::field::host, this->url_.host());
-    } else {
-      req_.set(http::field::host, this->url_.host() + ":" + std::string(port));
+    {
+      auto host_hdr = bracket_ipv6(this->url_.host());
+      if (port.empty() || !has_explicit_port) {
+        req_.set(http::field::host, host_hdr);
+      } else {
+        req_.set(http::field::host, host_hdr + ":" + std::string(port));
+      }
     }
     // Look up the domain name
     if (proxy_setting_) {
@@ -172,12 +191,26 @@ class session {
   }
 
   void do_request_proxy() {
+    auto bracket_ipv6 = [](std::string_view host) -> std::string {
+      if (host.empty()) return {};
+      if (host.front() == '[') return std::string(host);
+      if (host.find(':') != std::string_view::npos) {
+        std::string out;
+        out.reserve(host.size() + 2);
+        out.push_back('[');
+        out.append(host);
+        out.push_back(']');
+        return out;
+      }
+      return std::string(host);
+    };
+
     urls::url_view urlv(this->url_);
     std::string_view port = urlv.port();
     if (port.empty()) {
       port = default_port_;
     }
-    std::string url = fmt::format("{}:{}", urlv.host(), port);
+    std::string url = fmt::format("{}:{}", bracket_ipv6(urlv.host()), port);
     proxy_req_.emplace(http::verb::connect, url, 11);
     // Host header for CONNECT should be host:port
     proxy_req_->set(http::field::host, url);
@@ -230,7 +263,7 @@ class session {
               self->deliver(std::nullopt, 4);
               return;
             } else {
-              std::cout << "connected to proxy server." << std::endl;
+              // std::cout << "connected to proxy server." << std::endl;
               self->derived().replace_stream(
                   std::move(self->proxy_stream_.value()));
               self->after_connect();
@@ -435,13 +468,26 @@ class session_ssl
   void after_connect() {
     boost::urls::url_view urlv(this->url_);
     std::string host = urlv.host();
-    if (!SSL_set_tlsext_host_name(stream_->native_handle(), host.c_str())) {
-      beast::error_code ec{static_cast<int>(::ERR_get_error()),
-                           asio::error::get_ssl_category()};
-      BOOST_LOG_SEV(this->lg, trivial::error)
-          << "after connect, set_tlsext_host_name got error: " << ec.message()
-          << " host: " << host;
-      return this->deliver(std::nullopt, 9);
+    auto is_ipv4_literal = [](std::string_view s) {
+      if (s.empty()) return false;
+      if (s.find(':') != std::string_view::npos) return false;
+      if (s.find('.') == std::string_view::npos) return false;
+      return s.find_first_not_of("0123456789.") == std::string_view::npos;
+    };
+    auto is_ipv6_literal = [](std::string_view s) {
+      return !s.empty() && s.find(':') != std::string_view::npos;
+    };
+
+    // SNI is only defined for DNS hostnames. Skip for IP literals.
+    if (!is_ipv4_literal(host) && !is_ipv6_literal(host)) {
+      if (!SSL_set_tlsext_host_name(stream_->native_handle(), host.c_str())) {
+        beast::error_code ec{static_cast<int>(::ERR_get_error()),
+                             asio::error::get_ssl_category()};
+        BOOST_LOG_SEV(this->lg, trivial::error)
+            << "after connect, set_tlsext_host_name got error: " << ec.message()
+            << " host: " << host;
+        return this->deliver(std::nullopt, 9);
+      }
     }
     // Apply handshake timeout
     beast::get_lowest_layer(*stream_).expires_after(this->op_timeout());

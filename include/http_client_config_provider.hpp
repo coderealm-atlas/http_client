@@ -5,8 +5,12 @@
 #include <boost/asio/io_context.hpp>
 #include <boost/asio/ssl.hpp>
 #include <boost/asio/ssl/context.hpp>
+#include <boost/log/trivial.hpp>
 #include <boost/json.hpp>
+#include <cctype>
 #include <cstdint>
+#include <cstdlib>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <thread>
@@ -62,11 +66,14 @@ struct ProxySetting {
   std::string username;
   std::string password;
   bool disabled = false;
+  // True when this entry was inherited from process environment variables
+  // (HTTP_PROXY/HTTPS_PROXY/ALL_PROXY). Used to support NO_PROXY bypass.
+  bool from_env = false;
 
   bool operator==(const ProxySetting& other) const {
     return host == other.host && port == other.port &&
            username == other.username && password == other.password &&
-           disabled == other.disabled;
+           disabled == other.disabled && from_env == other.from_env;
   }
 
   friend ProxySetting tag_invoke(const json::value_to_tag<ProxySetting>&,
@@ -143,6 +150,16 @@ class HttpclientConfig {
   std::vector<cjj365::ProxySetting> proxy_pool;
 
  public:
+  void inherit_env_proxy_if_empty(cjj365::ProxySetting proxy) {
+    if (proxy.disabled) {
+      return;
+    }
+      proxy.from_env = true;
+    if (proxy_pool.empty()) {
+      proxy_pool.emplace_back(std::move(proxy));
+    }
+  }
+
   friend HttpclientConfig tag_invoke(
       const json::value_to_tag<HttpclientConfig>&, const json::value& jv) {
     HttpclientConfig config;
@@ -244,6 +261,7 @@ class HttpclientConfigProviderFile : public IHttpclientConfigProvider {
       jsonutil::substitue_envs(jv, config_sources.cli_overrides(),
                                app_properties.properties);
       parse_configs(jv);
+      inherit_env_proxy_if_enabled(config_sources);
     }
   }
 
@@ -265,6 +283,183 @@ class HttpclientConfigProviderFile : public IHttpclientConfigProvider {
   std::string_view default_name() const override { return default_name_; }
 
  private:
+  static bool is_truthy(std::string_view v) {
+    if (v.empty()) return false;
+    std::string s{v};
+    std::transform(s.begin(), s.end(), s.begin(), [](unsigned char c) {
+      return static_cast<char>(std::tolower(c));
+    });
+    return s == "1" || s == "true" || s == "yes" || s == "on";
+  }
+
+  static std::optional<std::string> getenv_any(
+      std::initializer_list<const char*> names) {
+    for (auto name : names) {
+      const char* v = std::getenv(name);
+      if (v && *v) {
+        return std::string(v);
+      }
+    }
+    return std::nullopt;
+  }
+
+  struct EnvVar {
+    std::string name;
+    std::string value;
+  };
+
+  static std::optional<EnvVar> getenv_any_named(
+      std::initializer_list<const char*> names) {
+    for (auto name : names) {
+      const char* v = std::getenv(name);
+      if (v && *v) {
+        return EnvVar{std::string(name), std::string(v)};
+      }
+    }
+    return std::nullopt;
+  }
+
+    static std::optional<cjj365::ProxySetting> parse_proxy_env_value(
+      std::string_view raw, std::string_view env_name_for_error = {}) {
+    auto trim = [](std::string_view s) {
+      while (!s.empty() && (s.front() == ' ' || s.front() == '\t' ||
+                            s.front() == '\n' || s.front() == '\r')) {
+        s.remove_prefix(1);
+      }
+      while (!s.empty() && (s.back() == ' ' || s.back() == '\t' ||
+                            s.back() == '\n' || s.back() == '\r')) {
+        s.remove_suffix(1);
+      }
+      return s;
+    };
+
+    raw = trim(raw);
+    if (raw.empty()) {
+      return std::nullopt;
+    }
+
+    // Handle scheme if present.
+    if (auto pos = raw.find("://"); pos != std::string_view::npos) {
+      auto scheme = raw.substr(0, pos);
+      std::string scheme_lc{scheme};
+      std::transform(scheme_lc.begin(), scheme_lc.end(), scheme_lc.begin(),
+                     [](unsigned char c) {
+                       return static_cast<char>(std::tolower(c));
+                     });
+
+      // We only implement HTTP proxy (incl. CONNECT for HTTPS). SOCKS URLs are
+      // common in some environments (e.g. ALL_PROXY=socks5://...), but treating
+      // them as HTTP proxy would fail in confusing ways.
+      if (scheme_lc.rfind("socks", 0) == 0) {
+        std::string msg = "Unsupported proxy scheme '" + scheme_lc +
+                          "' in environment";
+        if (!env_name_for_error.empty()) {
+          msg += " variable '" + std::string(env_name_for_error) + "'";
+        }
+        msg += ". Only HTTP proxies are supported. Use an http:// proxy, or "
+               "pass --ignore-env-proxy.";
+        throw std::invalid_argument(msg);
+      }
+
+      // Accept http/https schemes and ignore the scheme for proxy host parsing.
+      raw.remove_prefix(pos + 3);
+    }
+
+    // Drop any path/query fragment.
+    if (auto slash = raw.find('/'); slash != std::string_view::npos) {
+      raw = raw.substr(0, slash);
+    }
+
+    std::string_view auth_part;
+    std::string_view host_part = raw;
+    if (auto at = raw.rfind('@'); at != std::string_view::npos) {
+      auth_part = raw.substr(0, at);
+      host_part = raw.substr(at + 1);
+    }
+
+    cjj365::ProxySetting proxy;
+    proxy.disabled = false;
+
+    if (!auth_part.empty()) {
+      if (auto colon = auth_part.find(':'); colon != std::string_view::npos) {
+        proxy.username = std::string(auth_part.substr(0, colon));
+        proxy.password = std::string(auth_part.substr(colon + 1));
+      } else {
+        proxy.username = std::string(auth_part);
+      }
+    }
+
+    // Parse host[:port], with optional IPv6 literal.
+    if (!host_part.empty() && host_part.front() == '[') {
+      auto rb = host_part.find(']');
+      if (rb == std::string_view::npos) {
+        return std::nullopt;
+      }
+      proxy.host = std::string(host_part.substr(1, rb - 1));
+      if (rb + 1 < host_part.size() && host_part[rb + 1] == ':') {
+        proxy.port = std::string(host_part.substr(rb + 2));
+      }
+    } else {
+      auto colon = host_part.rfind(':');
+      if (colon != std::string_view::npos && colon + 1 < host_part.size()) {
+        proxy.host = std::string(host_part.substr(0, colon));
+        proxy.port = std::string(host_part.substr(colon + 1));
+      } else {
+        proxy.host = std::string(host_part);
+      }
+    }
+
+    if (proxy.host.empty()) {
+      return std::nullopt;
+    }
+    if (proxy.port.empty()) {
+      proxy.port = "80";
+    }
+    return proxy;
+  }
+
+  void inherit_env_proxy_if_enabled(const cjj365::ConfigSources& config_sources) {
+    auto it = config_sources.cli_overrides().find("ignore_env_proxy");
+    if (it != config_sources.cli_overrides().end() && is_truthy(it->second)) {
+      return;
+    }
+
+    // Precedence: HTTPS_PROXY, HTTP_PROXY, ALL_PROXY (and lowercase variants).
+    auto env = getenv_any_named({"HTTPS_PROXY", "https_proxy", "HTTP_PROXY",
+                                 "http_proxy", "ALL_PROXY", "all_proxy"});
+    if (!env.has_value()) {
+      return;
+    }
+
+    auto proxy_opt = parse_proxy_env_value(env->value, env->name);
+    if (!proxy_opt.has_value()) {
+      return;
+    }
+
+    std::size_t applied_profiles = 0;
+    for (auto& kv : configs_) {
+      const bool was_empty = kv.second.get_proxy_pool().empty();
+      kv.second.inherit_env_proxy_if_empty(*proxy_opt);
+      if (was_empty && !kv.second.get_proxy_pool().empty()) {
+        ++applied_profiles;
+      }
+    }
+
+    // Log once at startup; do not log credentials.
+    if (applied_profiles > 0) {
+      BOOST_LOG_TRIVIAL(info)
+          << "Detected env proxy via " << env->name << ": "
+          << proxy_opt->host << ':' << proxy_opt->port
+          << (proxy_opt->username.empty() ? "" : " (with credentials)")
+          << ", applied to " << applied_profiles << " profile(s).";
+    } else {
+      BOOST_LOG_TRIVIAL(info)
+          << "Detected env proxy via " << env->name << ": "
+          << proxy_opt->host << ':' << proxy_opt->port
+          << ", but all profiles already have proxy_pool configured; skipping env proxy.";
+    }
+  }
+
   void parse_configs(const json::value& jv) {
     if (!jv.is_object()) {
       throw std::invalid_argument(

@@ -8,6 +8,7 @@ TAGS
 .idea/
 # test/
 build/
+build_bb1/
 vcpkg_installed/
 CMakeFiles/
 Testing/

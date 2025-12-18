@@ -10,6 +10,7 @@
 #include <string>
 #include <iostream>
 
+#include "base64.h"
 #include "beast_connection_pool.hpp"
 
 namespace client_async {
@@ -91,13 +92,25 @@ class http_session_pooled
 
   void do_proxy_connect() {
     namespace http = boost::beast::http;
+    auto bracket_ipv6 = [](std::string_view host) -> std::string {
+      if (host.empty()) return {};
+      if (host.front() == '[') return std::string(host);
+      if (host.find(':') != std::string_view::npos) {
+        std::string out;
+        out.reserve(host.size() + 2);
+        out.push_back('[');
+        out.append(host);
+        out.push_back(']');
+        return out;
+      }
+      return std::string(host);
+    };
+
     // Build CONNECT request
-    std::string authority;
-    if (auto it = req_.find(http::field::host); it != req_.end()) {
-      authority = std::string(it->value());
-    } else {
-      authority = origin_.host + ":" + std::to_string(origin_.port);
-    }
+    // Prefer origin_ to avoid relying on potentially malformed Host header
+    // (notably IPv6 literals must be bracketed).
+    std::string authority =
+        bracket_ipv6(origin_.host) + ":" + std::to_string(origin_.port);
     // Keep authority string alive for the lifetime of this CONNECT operation
     connect_authority_ = std::move(authority);
 
@@ -110,7 +123,9 @@ class http_session_pooled
     connect_req_->version(11);
     connect_req_->set(http::field::host, connect_authority_);
     if (proxy_ && !proxy_->username.empty() && !proxy_->password.empty()) {
-      // Basic auth header construction left to caller if needed
+      std::string auth = proxy_->username + ":" + proxy_->password;
+      connect_req_->set(http::field::proxy_authorization,
+                        "Basic " + base64_encode(auth));
     }
     // Write CONNECT then read header
     pool_.set_op_timeout(*conn_, pool_io_timeout());
@@ -157,8 +172,20 @@ class http_session_pooled
     // Switch the connection to SSL and perform handshake, then write request
     auto* ssl_stream = conn_->upgrade_to_ssl();
     if (!ssl_stream) return finish(std::nullopt, 5);
-    // Set SNI
-    SSL_set_tlsext_host_name(ssl_stream->native_handle(), origin_.host.c_str());
+    auto is_ipv4_literal = [](std::string_view s) {
+      if (s.empty()) return false;
+      if (s.find(':') != std::string_view::npos) return false;
+      if (s.find('.') == std::string_view::npos) return false;
+      return s.find_first_not_of("0123456789.") == std::string_view::npos;
+    };
+    auto is_ipv6_literal = [](std::string_view s) {
+      return !s.empty() && s.find(':') != std::string_view::npos;
+    };
+
+    // Set SNI only for DNS names (skip IP literals).
+    if (!is_ipv4_literal(origin_.host) && !is_ipv6_literal(origin_.host)) {
+      SSL_set_tlsext_host_name(ssl_stream->native_handle(), origin_.host.c_str());
+    }
     pool_.set_op_timeout(*conn_, pool_handshake_timeout());
     ssl_stream->async_handshake(
         boost::asio::ssl::stream_base::client,

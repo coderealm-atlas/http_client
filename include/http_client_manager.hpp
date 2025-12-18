@@ -3,8 +3,10 @@
 #include <boost/asio.hpp>
 #include <chrono>
 #include <memory>
+#include <optional>
 #include <string>
 #include <string_view>
+#include <utility>
 
 #include "beast_connection_pool.hpp"
 #include "client_ssl_ctx.hpp"
@@ -93,7 +95,103 @@ class HttpClientManager {
   }
 
   std::string_view profile_name() const { return profile_name_; }
-  template <class RequestBody, class ResponseBody>
+
+   private:
+    static bool is_redirect_status(int status_code) {
+      return status_code == 301 || status_code == 302 || status_code == 303 ||
+             status_code == 307 || status_code == 308;
+    }
+
+    static std::optional<urls::url> resolve_redirect_url(
+        const urls::url& base, std::string_view location) {
+      if (location.empty()) {
+        return std::nullopt;
+      }
+
+      auto parse_abs = [](std::string_view s) -> std::optional<urls::url> {
+        urls::result<urls::url> parsed = urls::parse_uri(std::string(s));
+        if (!parsed) {
+          return std::nullopt;
+        }
+        return parsed.value();
+      };
+
+      // Absolute URI
+      if (location.rfind("http://", 0) == 0 || location.rfind("https://", 0) == 0) {
+        return parse_abs(location);
+      }
+
+      // Scheme-relative URI: //host/path
+      if (location.rfind("//", 0) == 0) {
+        std::string full;
+        full.reserve(base.scheme().size() + 1 + location.size());
+        full.append(base.scheme());
+        full.push_back(':');
+        full.append(location);
+        return parse_abs(full);
+      }
+
+      // Build base origin: scheme://host[:port]
+      std::string origin;
+      origin.reserve(base.scheme().size() + 3 + base.host().size() + 8);
+      origin.append(base.scheme());
+      origin.append("://");
+      origin.append(base.host());
+      if (base.has_port()) {
+        origin.push_back(':');
+        origin.append(base.port());
+      }
+
+      // Absolute-path reference
+      if (!location.empty() && location.front() == '/') {
+        std::string full;
+        full.reserve(origin.size() + location.size());
+        full.append(origin);
+        full.append(location);
+        return parse_abs(full);
+      }
+
+      // Relative-path reference (best-effort): base directory + location
+      std::string base_path = std::string(base.path());
+      auto slash = base_path.rfind('/');
+      std::string dir = (slash == std::string::npos) ? std::string("/")
+                                                     : base_path.substr(0, slash + 1);
+      std::string full;
+      full.reserve(origin.size() + dir.size() + location.size() + 1);
+      full.append(origin);
+      if (dir.empty() || dir.front() != '/') {
+        full.push_back('/');
+      }
+      full.append(dir);
+      full.append(location);
+      return parse_abs(full);
+    }
+
+    template <class RequestBody>
+    static void update_request_target_for_url(
+        http::request<RequestBody, http::basic_fields<std::allocator<char>>>& req,
+        const urls::url& url) {
+      // Request target should be origin-form: path[?query]
+      std::string target;
+      // Use encoded components to preserve exact bytes (important for
+      // signed URLs like GitHub release assets).
+      const auto enc_path = url.encoded_path();
+      const auto enc_query = url.encoded_query();
+      target.reserve(enc_path.size() + (!enc_query.empty() ? 1 + enc_query.size() : 0));
+      if (enc_path.empty()) {
+        target.push_back('/');
+      } else {
+        target.append(enc_path);
+      }
+      if (!enc_query.empty()) {
+        target.push_back('?');
+        target.append(enc_query);
+      }
+      req.target(target);
+    }
+
+   public:
+    template <class RequestBody, class ResponseBody>
   void http_request(
       const urls::url_view& url_input,
       http::request<RequestBody, http::basic_fields<std::allocator<char>>>&&
@@ -104,22 +202,93 @@ class HttpClientManager {
                int)>&& callback,
       HttpClientRequestParams&& params = {},
       const cjj365::ProxySetting* proxy_setting = nullptr) {
-    urls::url url(url_input);
-    if (url.scheme() == "https") {
-      auto session = std::make_shared<
-          session_ssl<RequestBody, ResponseBody, std::allocator<char>>>(
-          *(this->ioc), this->client_ssl_ctx.context(), std::move(url),
-          std::move(params), std::move(callback), proxy_setting);
-      session->set_req(std::move(req));
-      session->run();
-    } else {
-      auto session = std::make_shared<
-          session_plain<RequestBody, ResponseBody, std::allocator<char>>>(
-          *(this->ioc), std::move(url), std::move(params), std::move(callback),
-          proxy_setting);
-      session->set_req(std::move(req));
-      session->run();
-    }
+    struct RedirectState {
+      urls::url url;
+      http::request<RequestBody, http::basic_fields<std::allocator<char>>>
+          req_template;
+      HttpClientRequestParams params;
+      const cjj365::ProxySetting* proxy_setting{nullptr};
+      int redirects_left{5};
+      std::function<void(
+          std::optional<http::response<ResponseBody,
+                                       http::basic_fields<std::allocator<char>>>>&&,
+          int)>
+          user_cb;
+    };
+
+    auto st = std::make_shared<RedirectState>(RedirectState{
+        .url = urls::url(url_input),
+        .req_template = std::move(req),
+        .params = std::move(params),
+        .proxy_setting = proxy_setting,
+        .redirects_left = 5,
+        .user_cb = std::move(callback),
+    });
+
+    auto step = std::make_shared<std::function<void()>>();
+    *step = [this, st, step]() {
+      auto req_one = st->req_template;
+      update_request_target_for_url(req_one, st->url);
+
+      auto cb = [st, step](std::optional<http::response<
+                               ResponseBody,
+                               http::basic_fields<std::allocator<char>>>>&& resp,
+                           int ec) mutable {
+        if (ec != 0 || !resp.has_value() || !st->params.follow_redirect ||
+            st->redirects_left <= 0) {
+          st->user_cb(std::move(resp), ec);
+          return;
+        }
+
+        // Follow redirects only for GET/HEAD to avoid method/body semantics.
+        if (st->req_template.method() != http::verb::get &&
+            st->req_template.method() != http::verb::head) {
+          st->user_cb(std::move(resp), ec);
+          return;
+        }
+
+        int status = resp->result_int();
+        if (!is_redirect_status(status)) {
+          st->user_cb(std::move(resp), ec);
+          return;
+        }
+
+        auto it = resp->find(http::field::location);
+        if (it == resp->end()) {
+          st->user_cb(std::move(resp), ec);
+          return;
+        }
+
+        auto next = resolve_redirect_url(st->url, std::string_view(it->value()));
+        if (!next.has_value()) {
+          st->user_cb(std::move(resp), ec);
+          return;
+        }
+
+        st->url = std::move(*next);
+        st->redirects_left -= 1;
+        (*step)();
+      };
+
+      urls::url url_local = st->url;
+      if (url_local.scheme() == "https") {
+        auto session = std::make_shared<
+            session_ssl<RequestBody, ResponseBody, std::allocator<char>>>(
+            *(this->ioc), this->client_ssl_ctx.context(), std::move(url_local),
+            HttpClientRequestParams{st->params}, std::move(cb), st->proxy_setting);
+        session->set_req(std::move(req_one));
+        session->run();
+      } else {
+        auto session = std::make_shared<
+            session_plain<RequestBody, ResponseBody, std::allocator<char>>>(
+            *(this->ioc), std::move(url_local), HttpClientRequestParams{st->params},
+            std::move(cb), st->proxy_setting);
+        session->set_req(std::move(req_one));
+        session->run();
+      }
+    };
+
+    (*step)();
   }
 
   // New: pooled variant (keeps existing APIs intact)
@@ -132,8 +301,14 @@ class HttpClientManager {
           void(std::optional<http::response<
                    ResponseBody, http::basic_fields<std::allocator<char>>>>&&,
                int)>&& callback,
-      HttpClientRequestParams&& /*params*/ = {},
+      HttpClientRequestParams&& params = {},
       const cjj365::ProxySetting* proxy_setting = nullptr) {
+    if (params.follow_redirect) {
+      // Reuse the non-pooled implementation for redirect chains.
+      return http_request<RequestBody, ResponseBody>(
+          url_input, std::move(req), std::move(callback), std::move(params),
+          proxy_setting);
+    }
     // Build origin for pool acquisition
     urls::url url(url_input);
     beast_pool::Origin origin;
