@@ -199,6 +199,20 @@ class HttpclientConfig {
                                return proxy.disabled;
                              }),
               config.proxy_pool.end());
+
+          auto has_unresolved_env = [](const std::string& s) {
+            // ConfigSources leaves ${VAR} intact when VAR is not set.
+            // Treat such entries as unusable so we don't attempt proxy auth
+            // with literal placeholders.
+            return s.find("${") != std::string::npos;
+          };
+          config.proxy_pool.erase(
+              std::remove_if(config.proxy_pool.begin(), config.proxy_pool.end(),
+                             [&](const cjj365::ProxySetting& proxy) {
+                               return has_unresolved_env(proxy.username) ||
+                                      has_unresolved_env(proxy.password);
+                             }),
+              config.proxy_pool.end());
         }
         return config;
       } else {

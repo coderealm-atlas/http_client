@@ -130,7 +130,8 @@ TEST(HttpClientRedirectTest, FollowRedirectLocal) {
   RedirectServer srv;
   srv.run_async();
 
-  misc::ThreadNotifier notifier{};
+  // Use a timeout so failures don't hang the test suite.
+  misc::ThreadNotifier notifier{5000};
 
   cjj365::AppProperties app_properties{config_sources()};
   auto http_client_config_provider =

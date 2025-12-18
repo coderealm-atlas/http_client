@@ -209,6 +209,7 @@ class HttpClientManager {
       HttpClientRequestParams params;
       const cjj365::ProxySetting* proxy_setting{nullptr};
       int redirects_left{5};
+      std::shared_ptr<std::function<void()>> step;
       std::function<void(
           std::optional<http::response<ResponseBody,
                                        http::basic_fields<std::allocator<char>>>>&&,
@@ -222,15 +223,21 @@ class HttpClientManager {
         .params = std::move(params),
         .proxy_setting = proxy_setting,
         .redirects_left = 5,
+        .step = nullptr,
         .user_cb = std::move(callback),
     });
 
     auto step = std::make_shared<std::function<void()>>();
-    *step = [this, st, step]() {
+    st->step = step;
+    std::weak_ptr<RedirectState> st_weak = st;
+
+    *step = [this, st_weak]() {
+      auto st = st_weak.lock();
+      if (!st) return;
       auto req_one = st->req_template;
       update_request_target_for_url(req_one, st->url);
 
-      auto cb = [st, step](std::optional<http::response<
+      auto cb = [st](std::optional<http::response<
                                ResponseBody,
                                http::basic_fields<std::allocator<char>>>>&& resp,
                            int ec) mutable {
@@ -267,7 +274,9 @@ class HttpClientManager {
 
         st->url = std::move(*next);
         st->redirects_left -= 1;
-        (*step)();
+        if (st->step) {
+          (*st->step)();
+        }
       };
 
       urls::url url_local = st->url;

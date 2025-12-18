@@ -29,7 +29,8 @@
 #include "boost/di.hpp" 
 
 static cjj365::ConfigSources& config_sources() {
-  static cjj365::ConfigSources instance({fs::path{"tests/config_dir"}}, {});
+  static const fs::path config_dir = fs::path(__FILE__).parent_path() / "config_dir";
+  static cjj365::ConfigSources instance({config_dir}, {});
   return instance;
 }
 static customio::ConsoleOutputWithColor& output() {
@@ -58,6 +59,8 @@ struct KeepAliveServer {
     port = acceptor.local_endpoint().port();
   }
 
+  ~KeepAliveServer() { stop(); }
+
   void run_async() {
     thr = std::thread([this] {
       accept();
@@ -70,12 +73,16 @@ struct KeepAliveServer {
   }
 
   void stop() {
+    if (!thr.joinable()) {
+      ioc.stop();
+      return;
+    }
     net::post(ioc, [this] {
       boost::system::error_code ec;
       acceptor.close(ec);
     });
     ioc.stop();
-    if (thr.joinable()) thr.join();
+    thr.join();
   }
 
   void accept() {
@@ -142,6 +149,8 @@ struct HttpsServer {
     port = acceptor.local_endpoint().port();
     cjj365::testcert::load_server_certificate(ctx);
   }
+
+  ~HttpsServer() { stop(); }
 
   void run_async() {
     thr = std::thread([this] {
@@ -219,6 +228,8 @@ struct ConnectProxy {
                  true) {
     port = acceptor.local_endpoint().port();
   }
+
+  ~ConnectProxy() { stop(); }
   void run_async() {
     thr = std::thread([this] {
       do_accept();
@@ -258,13 +269,16 @@ struct ConnectProxy {
             if (pos == std::string::npos) return;
             self->target_host = authority.substr(0, pos);
             self->target_port = authority.substr(pos + 1);
-            // Connect upstream
-            tcp::resolver resolver(self->client.get_executor());
-            auto results =
-                resolver.resolve(self->target_host, self->target_port, ec);
-            if (ec) return;
-            // Use a single endpoint to avoid lifetime issues with results
-            auto ep = results.begin()->endpoint();
+            // Connect upstream.
+            // This is a *test* proxy: tunnel all CONNECT targets to loopback
+            // so "www.example.com:<local_port>" reaches our local HTTPS origin.
+            unsigned short port_num = 0;
+            try {
+              port_num = static_cast<unsigned short>(std::stoi(self->target_port));
+            } catch (...) {
+              return;
+            }
+            tcp::endpoint ep(net::ip::make_address("127.0.0.1"), port_num);
             self->upstream.async_connect(
                 ep, [self](boost::system::error_code ec) {
                   if (ec) return;
@@ -275,35 +289,48 @@ struct ConnectProxy {
                       self->client, *res,
                       [self, res](boost::system::error_code ec, std::size_t) {
                         if (ec) return;
-                        self->pump();
+                        self->start_pump();
                       });
                 });
           });
     }
-    void pump() {
+    void shutdown() {
+      boost::system::error_code ec;
+      client.close(ec);
+      upstream.close(ec);
+    }
+
+    void start_pump() {
+      do_client_to_upstream();
+      do_upstream_to_client();
+    }
+
+    void do_client_to_upstream() {
       auto self = shared_from_this();
-      // client -> upstream
-      client.async_read_some(
-          net::buffer(cbuf),
-          [self](boost::system::error_code ec, std::size_t n) {
-            if (ec) return;
-            net::async_write(self->upstream, net::buffer(self->cbuf, n),
-                             [self](boost::system::error_code ec, std::size_t) {
-                               if (ec) return;
-                               self->pump();
+      client.async_read_some(net::buffer(cbuf),
+                             [self](boost::system::error_code ec, std::size_t n) {
+                               if (ec) return self->shutdown();
+                               net::async_write(
+                                   self->upstream, net::buffer(self->cbuf, n),
+                                   [self](boost::system::error_code ec, std::size_t) {
+                                     if (ec) return self->shutdown();
+                                     self->do_client_to_upstream();
+                                   });
                              });
-          });
-      // upstream -> client
-      upstream.async_read_some(
-          net::buffer(sbuf),
-          [self](boost::system::error_code ec, std::size_t n) {
-            if (ec) return;
-            net::async_write(self->client, net::buffer(self->sbuf, n),
-                             [self](boost::system::error_code ec, std::size_t) {
-                               if (ec) return;
-                               self->pump();
-                             });
-          });
+    }
+
+    void do_upstream_to_client() {
+      auto self = shared_from_this();
+      upstream.async_read_some(net::buffer(sbuf),
+                               [self](boost::system::error_code ec, std::size_t n) {
+                                 if (ec) return self->shutdown();
+                                 net::async_write(
+                                     self->client, net::buffer(self->sbuf, n),
+                                     [self](boost::system::error_code ec, std::size_t) {
+                                       if (ec) return self->shutdown();
+                                       self->do_upstream_to_client();
+                                     });
+                               });
     }
     char cbuf[4096];
     char sbuf[4096];
@@ -403,7 +430,10 @@ TEST(HttpClientTest, PooledReuseLocal) {
   std::optional<std::string> conn_id_2;
   std::optional<int> code1;
   std::optional<int> code2;
-  misc::ThreadNotifier notifier{};
+  misc::ThreadNotifier notifier{5000};
+
+  client_async::HttpClientRequestParams pooled_params;
+  pooled_params.follow_redirect = false;
 
   // First request (pooled)
   {
@@ -423,7 +453,8 @@ TEST(HttpClientTest, PooledReuseLocal) {
             conn_id_1.reset();
           }
           notifier.notify();
-        });
+        },
+        client_async::HttpClientRequestParams{pooled_params});
   }
   notifier.waitForNotification();
 
@@ -447,7 +478,8 @@ TEST(HttpClientTest, PooledReuseLocal) {
             conn_id_2.reset();
           }
           notifier.notify();
-        });
+        },
+        client_async::HttpClientRequestParams{pooled_params});
   }
   notifier.waitForNotification();
 
@@ -490,22 +522,35 @@ TEST(HttpClientTest, PooledProxyHttps) {
 
   std::optional<int> status;
   std::optional<std::string> body;
-  misc::ThreadNotifier notifier{};
+  std::optional<int> callback_code;
+  std::optional<bool> callback_has_response;
+  misc::ThreadNotifier notifier{5000};
+
+  client_async::HttpClientRequestParams pooled_params;
+  pooled_params.follow_redirect = false;
 
   cjj365::ProxySetting pxy{.host = "127.0.0.1",
                            .port = std::to_string(proxy.port)};
   http_client_->http_request_pooled<http::string_body, http::string_body>(
       urls::url_view(url), std::move(req),
       [&](std::optional<http::response<http::string_body>>&& res, int code) {
-        ASSERT_EQ(code, 0);
-        ASSERT_TRUE(res.has_value());
-        status = res->result_int();
-        body = res->body();
+        // Don't ASSERT/EXPECT in callbacks: if an assertion aborts before
+        // notify(), the test thread will hang.
+        callback_code = code;
+        callback_has_response = res.has_value();
+        if (res) {
+          status = res->result_int();
+          body = res->body();
+        }
         notifier.notify();
       },
-      {}, &pxy);
+      client_async::HttpClientRequestParams{pooled_params}, &pxy);
 
   notifier.waitForNotification();
+  ASSERT_TRUE(callback_code.has_value());
+  ASSERT_EQ(*callback_code, 0);
+  ASSERT_TRUE(callback_has_response.has_value());
+  ASSERT_TRUE(*callback_has_response);
   ASSERT_TRUE(status.has_value());
   ASSERT_TRUE(body.has_value());
   EXPECT_EQ(*status, 200);
