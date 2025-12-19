@@ -1,22 +1,23 @@
 #pragma once
 
+#include <fmt/format.h>
+
+#include <algorithm>
 #include <boost/beast/http.hpp>
 #include <boost/beast/http/empty_body.hpp>
 #include <boost/beast/http/file_body.hpp>
 #include <boost/core/detail/string_view.hpp>
 #include <boost/json/serializer.hpp>
-#include <exception>
-#include <fmt/format.h>
-#include <algorithm>
 #include <cctype>
 #include <cstdlib>
+#include <exception>
 #include <memory>
 #include <optional>
 #include <string>
 #include <string_view>
-#include <vector>
 #include <type_traits>
 #include <utility>
+#include <vector>
 
 #include "common_macros.hpp"
 #include "http_client_manager.hpp"
@@ -40,7 +41,7 @@ struct HttpExchange {
   bool follow_redirect = true;
   logsrc::severity_logger<trivial::severity_level> lg;
   bool no_modify_req = false;
-  const ProxySetting* proxy = nullptr;
+  std::shared_ptr<const ProxySetting> proxy{};
   Req request;
   std::optional<Res> response = std::nullopt;
   std::optional<fs::path> response_file = std::nullopt;
@@ -178,7 +179,8 @@ struct HttpExchange {
         token.erase(0, token.find_first_not_of(" \t"));
 
         std::string prefix = cookie_name + "=";
-        if (token.size() >= prefix.size() && token.substr(0, prefix.size()) == prefix) {
+        if (token.size() >= prefix.size() &&
+            token.substr(0, prefix.size()) == prefix) {
           std::string value = token.substr(cookie_name.length() + 1);
 
           // Strip quotes if present
@@ -228,8 +230,8 @@ struct HttpExchange {
     const std::string response_body_preview = make_preview(response_body);
 
     return getJsonResponse().and_then(
-        [response_status, response_body_preview](json::value jv)
-            -> MyResult<ValueType> {
+        [response_status,
+         response_body_preview](json::value jv) -> MyResult<ValueType> {
           DEBUG_PRINT("JSON response before parse: {}\n" << jv);
           try {
             return MyResult<ValueType>::Ok(json::value_to<ValueType>(jv));
@@ -266,8 +268,8 @@ struct HttpExchange {
     const std::string response_body_preview = make_preview(response_body);
 
     return getJsonResponse().and_then(
-        [response_status, response_body_preview](json::value jv)
-            -> MyResult<ValueType> {
+        [response_status,
+         response_body_preview](json::value jv) -> MyResult<ValueType> {
           DEBUG_PRINT("JSON data response before parse: " << jv);
           try {
             if (!jv.is_object()) {
@@ -326,8 +328,8 @@ struct HttpExchange {
         response.has_value() ? response->body() : std::string{};
     const std::string response_body_preview = make_preview(response_body);
 
-    return getJsonResponse().and_then(
-        [response_status, response_body_preview](json::value jv) -> Requested {
+    return getJsonResponse().and_then([response_status, response_body_preview](
+                                          json::value jv) -> Requested {
       DEBUG_PRINT("JSON response result before parse: {}\n" << jv);
       try {
         return json::value_to<Requested>(jv);
@@ -354,14 +356,14 @@ struct HttpExchange {
           Error err{JSON_ERR_MALFORMED,
                     "Malformed JSON text: response body is empty"};
           err.response_status = static_cast<int>(response->result_int());
-          err.params["response_body_preview"] =
-              make_preview(response->body());
+          err.params["response_body_preview"] = make_preview(response->body());
           return MyResult<json::value>::Err(std::move(err));
         }
         return MyResult<json::value>::Ok(json::parse(response_string));
       } else {
         Error err{JSON_ERR_DECODE,
-                  "Failed to decode/parse JSON (low-level): response is not available"};
+                  "Failed to decode/parse JSON (low-level): response is not "
+                  "available"};
         err.response_status = 0;
         return MyResult<json::value>::Err(std::move(err));
       }
@@ -372,9 +374,9 @@ struct HttpExchange {
         std::string preview = make_preview(response->body());
         BOOST_LOG_SEV(lg, trivial::error)
             << "Response body preview: " << preview;
-        Error err{
-            JSON_ERR_DECODE,
-            fmt::format("Failed to decode/parse JSON (low-level): {}", e.what())};
+        Error err{JSON_ERR_DECODE,
+                  fmt::format("Failed to decode/parse JSON (low-level): {}",
+                              e.what())};
         err.response_status = static_cast<int>(response->result_int());
         err.params["response_body_preview"] = std::move(preview);
         return MyResult<json::value>::Err(std::move(err));
@@ -518,10 +520,9 @@ auto http_request_io(HttpClientManager& pool, int verbose = 0) {
 
       auto to_lower = [](std::string_view s) {
         std::string out{s};
-        std::transform(out.begin(), out.end(), out.begin(),
-                       [](unsigned char c) {
-                         return static_cast<char>(std::tolower(c));
-                       });
+        std::transform(
+            out.begin(), out.end(), out.begin(),
+            [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
         return out;
       };
 
@@ -543,7 +544,8 @@ auto http_request_io(HttpClientManager& pool, int verbose = 0) {
         std::string_view list{no_proxy_c};
         while (!list.empty()) {
           auto comma = list.find(',');
-          auto token = comma == std::string_view::npos ? list : list.substr(0, comma);
+          auto token =
+              comma == std::string_view::npos ? list : list.substr(0, comma);
           token = trim(token);
 
           if (!token.empty()) {
@@ -575,7 +577,8 @@ auto http_request_io(HttpClientManager& pool, int verbose = 0) {
               return true;
             } else {
               // Suffix match:
-              // - token ".example.com" matches "a.example.com" (but not "example.com")
+              // - token ".example.com" matches "a.example.com" (but not
+              // "example.com")
               // - token "example.com" matches "example.com" and "a.example.com"
               std::string_view suffix = token_lc;
               bool require_dot = false;
@@ -585,9 +588,11 @@ auto http_request_io(HttpClientManager& pool, int verbose = 0) {
               }
 
               if (!suffix.empty() && host_lc.size() > suffix.size() &&
-                  host_lc.compare(host_lc.size() - suffix.size(), suffix.size(), suffix) == 0) {
+                  host_lc.compare(host_lc.size() - suffix.size(), suffix.size(),
+                                  suffix) == 0) {
                 const auto dot_pos = host_lc.size() - suffix.size();
-                if (!require_dot || (dot_pos > 0 && host_lc[dot_pos - 1] == '.')) {
+                if (!require_dot ||
+                    (dot_pos > 0 && host_lc[dot_pos - 1] == '.')) {
                   return true;
                 }
               }
@@ -613,8 +618,9 @@ auto http_request_io(HttpClientManager& pool, int verbose = 0) {
       }
 
       // If proxy is inherited from env, honor NO_PROXY for this request.
-      if (ex->proxy && ex->proxy->from_env && should_bypass_env_proxy_for_url(ex->url)) {
-        ex->proxy = nullptr;
+      if (ex->proxy && ex->proxy->from_env &&
+          should_bypass_env_proxy_for_url(ex->url)) {
+        ex->proxy.reset();
       }
 
       auto req = ex->request;
@@ -647,10 +653,11 @@ auto http_request_io(HttpClientManager& pool, int verbose = 0) {
             BOOST_LOG_SEV(ex->lg, trivial::error)
                 << "http_request_io failed with error num: " << err
                 << ", url:  " << url_view;
-            cb(monad::Result<ExchangePtr, monad::Error>::Err(
-                monad::Error{err, fmt::format("http_request_io failed, url: {}", url_view)}));
+            cb(monad::Result<ExchangePtr, monad::Error>::Err(monad::Error{
+                err,
+                fmt::format("http_request_io failed, url: {}", url_view)}));
           },
-          HttpClientRequestParams{request_params}, ex->proxy);
+          HttpClientRequestParams{request_params}, ex->proxy.get());
     });
   };
 }

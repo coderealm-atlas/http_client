@@ -529,8 +529,9 @@ TEST(HttpClientTest, PooledProxyHttps) {
   client_async::HttpClientRequestParams pooled_params;
   pooled_params.follow_redirect = false;
 
-  cjj365::ProxySetting pxy{.host = "127.0.0.1",
-                           .port = std::to_string(proxy.port)};
+  cjj365::ProxySetting pxy;
+  pxy.host = "127.0.0.1";
+  pxy.port = std::to_string(proxy.port);
   http_client_->http_request_pooled<http::string_body, http::string_body>(
       urls::url_view(url), std::move(req),
       [&](std::optional<http::response<http::string_body>>&& res, int code) {
