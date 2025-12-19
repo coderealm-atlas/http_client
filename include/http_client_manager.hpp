@@ -235,7 +235,9 @@ class HttpClientManager {
       auto st = st_weak.lock();
       if (!st) return;
       auto req_one = st->req_template;
-      update_request_target_for_url(req_one, st->url);
+      if (!st->params.no_modify_req) {
+        update_request_target_for_url(req_one, st->url);
+      }
 
       auto cb = [st](std::optional<http::response<
                                ResponseBody,
