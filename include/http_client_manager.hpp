@@ -1,6 +1,7 @@
 #pragma once
 
 #include <boost/asio.hpp>
+#include <boost/system/result.hpp>
 #include <chrono>
 #include <memory>
 #include <optional>
@@ -109,7 +110,7 @@ class HttpClientManager {
       }
 
       auto parse_abs = [](std::string_view s) -> std::optional<urls::url> {
-        urls::result<urls::url> parsed = urls::parse_uri(std::string(s));
+        boost::system::result<urls::url> parsed = urls::parse_uri(std::string(s));
         if (!parsed) {
           return std::nullopt;
         }
