@@ -717,7 +717,6 @@ struct SessionAttributes {
   std::optional<std::string> user_name;
   std::optional<std::string> user_email;
   std::optional<int64_t> created_at;
-  std::optional<int64_t> user_quota_id;
   std::vector<std::string> user_roles;
   std::vector<Permission> user_permissions;
   std::optional<std::string> country_of_residence;
@@ -784,9 +783,6 @@ struct SessionAttributes {
     }
     if (sa.created_at) {
       jo["created_at"] = sa.created_at.value();
-    }
-    if (sa.user_quota_id) {
-      jo["user_quota_id"] = sa.user_quota_id.value();
     }
     if (!sa.user_roles.empty()) {
       jo["user_roles"] = json::value_from(sa.user_roles);
@@ -856,9 +852,6 @@ struct SessionAttributes {
       }
       if (auto* created_at_p = jo_p->if_contains("created_at")) {
         sa.created_at.emplace(created_at_p->to_number<int64_t>());
-      }
-      if (auto* user_quota_id_p = jo_p->if_contains("user_quota_id")) {
-        sa.user_quota_id.emplace(user_quota_id_p->to_number<int64_t>());
       }
       if (auto* user_roles_p = jo_p->if_contains("user_roles")) {
         sa.user_roles = json::value_to<std::vector<std::string>>(*user_roles_p);
