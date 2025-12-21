@@ -21,6 +21,7 @@
 #include <vector>
 
 #include "result_monad.hpp"  // monad::Error, monad::Result
+#include "io_retry_executor.hpp"
 
 namespace monad {
 
@@ -391,6 +392,24 @@ class IO {
                           boost::asio::io_context& ioc) && {
     return std::move(*this).retry_exponential_if(
         max_attempts, initial_delay, ioc, [](const Error&) { return true; });
+  }
+
+  // Default-executor overloads using shared retry executor
+  IO<T> retry_exponential_if(int max_attempts,
+                             std::chrono::milliseconds initial_delay,
+                             std::function<bool(const Error&)> should_retry) && {
+    return std::move(*this).retry_exponential_if(max_attempts, initial_delay,
+                                                 retry_io_context(),
+                                                 std::move(should_retry));
+  }
+
+  IO<T> retry_exponential(int max_attempts,
+                          std::chrono::milliseconds initial_delay) && {
+    return std::move(*this).retry_exponential_if(max_attempts, initial_delay,
+                                                 retry_io_context(),
+                                                 [](const Error&) {
+                                                   return true;
+                                                 });
   }
 
   // Poll until condition on value is satisfied or attempts exhausted.
@@ -883,6 +902,24 @@ class IO<void> {
                              boost::asio::io_context& ioc) && {
     return std::move(*this).retry_exponential_if(
         max_attempts, initial_delay, ioc, [](const Error&) { return true; });
+  }
+
+  // Default-executor overloads using shared retry executor
+  IO<void> retry_exponential_if(int max_attempts,
+                                std::chrono::milliseconds initial_delay,
+                                std::function<bool(const Error&)> should_retry) && {
+    return std::move(*this).retry_exponential_if(max_attempts, initial_delay,
+                                                 retry_io_context(),
+                                                 std::move(should_retry));
+  }
+
+  IO<void> retry_exponential(int max_attempts,
+                             std::chrono::milliseconds initial_delay) && {
+    return std::move(*this).retry_exponential_if(max_attempts, initial_delay,
+                                                 retry_io_context(),
+                                                 [](const Error&) {
+                                                   return true;
+                                                 });
   }
 
   // Poll IO<void> until external condition is satisfied. After each run, call
