@@ -25,6 +25,11 @@ class ClientSSLContext {
       : ctx_(config_provider.get().get_ssl_method()) {
     const auto& cfg = config_provider.get();
 
+    if (cfg.get_insecure_skip_verify()) {
+      ctx_.set_verify_mode(ssl::verify_none);
+      return;
+    }
+
     if (cfg.get_default_verify_path()) {
       ctx_.set_default_verify_paths();
     }
@@ -42,10 +47,8 @@ class ClientSSLContext {
       }
     }
 
-    ctx_.set_verify_mode(cfg.get_insecure_skip_verify() ? ssl::verify_none
-                                                        : ssl::verify_peer);
-
-  load_platform_root_certificates(ctx_);
+    ctx_.set_verify_mode(ssl::verify_peer);
+    load_platform_root_certificates(ctx_);
   }
 
   ssl::context& context() noexcept { return ctx_; }

@@ -232,7 +232,7 @@ struct HttpExchange {
     return getJsonResponse().and_then(
         [response_status,
          response_body_preview](json::value jv) -> MyResult<ValueType> {
-          DEBUG_PRINT("JSON response before parse: {}\n" << jv);
+          DEBUG_PRINT("JSON response before parse:\n" << jv);
           try {
             return MyResult<ValueType>::Ok(json::value_to<ValueType>(jv));
           } catch (const std::exception& e) {

@@ -21,6 +21,14 @@ inline boost::asio::io_context& retry_io_context() {
     runner = std::make_shared<std::thread>([] {
       ioc.run();
     });
+    std::atexit([] {
+      guard.reset();
+      ioc.stop();
+      if (runner && runner->joinable()) {
+        runner->join();
+      }
+      runner.reset();
+    });
   });
 
   return ioc;
