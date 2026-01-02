@@ -127,6 +127,11 @@ class ProxyPool {
     return proxies_ ? *proxies_ : kEmpty;
   }
 
+  ProxyList entries_copy() const {
+    std::lock_guard<std::mutex> lock(mutex_);
+    return proxies_ ? *proxies_ : ProxyList{};
+  }
+
  private:
   bool is_blacklisted(const cjj365::ProxySetting& proxy) {
     auto it = blacklist_.find(proxy);

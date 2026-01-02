@@ -80,6 +80,13 @@ class HttpClientManager {
     return proxy_pool_->next();
   }
 
+  std::vector<cjj365::ProxySetting> proxy_pool_entries() const {
+    if (!proxy_pool_) {
+      return {};
+    }
+    return proxy_pool_->entries_copy();
+  }
+
   void replace_proxy_pool(std::vector<cjj365::ProxySetting> entries) {
     if (proxy_pool_) {
       proxy_pool_->replace_entries(std::move(entries));
