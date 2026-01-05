@@ -4,6 +4,7 @@
 #include <filesystem>
 #include <fstream>
 #include <map>
+#include <optional>
 #include <string>
 #include <unistd.h>
 
@@ -13,6 +14,28 @@ namespace fs = std::filesystem;
 namespace json = boost::json;
 
 namespace {
+
+struct EnvGuard {
+  std::string name;
+  std::optional<std::string> old_value;
+  EnvGuard(const std::string& n, const std::optional<std::string>& v)
+      : name(n) {
+    const char* ov = std::getenv(name.c_str());
+    if (ov) old_value = std::string(ov);
+    if (v.has_value()) {
+      ::setenv(name.c_str(), v->c_str(), 1);
+    } else {
+      ::unsetenv(name.c_str());
+    }
+  }
+  ~EnvGuard() {
+    if (old_value.has_value()) {
+      ::setenv(name.c_str(), old_value->c_str(), 1);
+    } else {
+      ::unsetenv(name.c_str());
+    }
+  }
+};
 
 // Helper to write a string to a file path (create parent dirs as needed)
 static void write_file(const fs::path& p, const std::string& content) {
@@ -138,6 +161,46 @@ TEST(ConfigSourcesTest, CliOverridesPropagateToAppProperties) {
   auto it_other = props.properties.find("OTHER");
   ASSERT_NE(it_other, props.properties.end());
   EXPECT_EQ(it_other->second, "cli-only");
+
+  std::error_code ec;
+  fs::remove_all(root, ec);
+}
+
+TEST(ConfigSourcesTest, JsonContentExpandsEnvWithDefaultValue) {
+  fs::path root = make_temp_dir("configsources_env_default");
+  write_file(root / "svc.json",
+             R"({
+  \"log_dir\": \"${BBWS_LOG_DIR:-/d/app-paths/logs}\"
+})");
+
+  // Ensure the env is absent so the default branch is used.
+  EnvGuard unset("BBWS_LOG_DIR", std::nullopt);
+
+  cjj365::ConfigSources sources({root}, {"dev"});
+  auto res = sources.json_content("svc");
+  ASSERT_TRUE(res.is_ok()) << res.error().what;
+  ASSERT_TRUE(res.value().is_object());
+  EXPECT_EQ(res.value().as_object().at("log_dir").as_string(),
+            "/d/app-paths/logs");
+
+  std::error_code ec;
+  fs::remove_all(root, ec);
+}
+
+TEST(ConfigSourcesTest, JsonContentExpandsEnvOverridesDefault) {
+  fs::path root = make_temp_dir("configsources_env_override");
+  write_file(root / "svc.json",
+             R"({
+  \"log_dir\": \"${BBWS_LOG_DIR:-/d/app-paths/logs}\"
+})");
+
+  EnvGuard set("BBWS_LOG_DIR", std::optional<std::string>{"/tmp/bbws_logs"});
+
+  cjj365::ConfigSources sources({root}, {"dev"});
+  auto res = sources.json_content("svc");
+  ASSERT_TRUE(res.is_ok()) << res.error().what;
+  ASSERT_TRUE(res.value().is_object());
+  EXPECT_EQ(res.value().as_object().at("log_dir").as_string(), "/tmp/bbws_logs");
 
   std::error_code ec;
   fs::remove_all(root, ec);

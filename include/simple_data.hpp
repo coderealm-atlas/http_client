@@ -402,9 +402,18 @@ inline std::string ConfigSources::expand_env_in_string(
     if (in[i] == '$' && i + 1 < in.size() && in[i + 1] == '{') {
       size_t end = in.find('}', i + 2);
       if (end != std::string::npos) {
-        std::string var = in.substr(i + 2, end - (i + 2));
+        std::string token = in.substr(i + 2, end - (i + 2));
+        std::string var = token;
+        std::optional<std::string> default_val;
+        if (auto delim = token.find(":-"); delim != std::string::npos) {
+          var = token.substr(0, delim);
+          default_val = token.substr(delim + 2);
+        }
+
         if (auto resolved = resolve_env_var(var)) {
           out.append(*resolved);
+        } else if (default_val.has_value()) {
+          out.append(*default_val);
         } else {
           out.append(in.substr(i, end - i + 1));
         }

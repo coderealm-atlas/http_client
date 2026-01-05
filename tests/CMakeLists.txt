@@ -55,6 +55,16 @@ add_test(
         NAME ${T_CFG}.cli_overrides
         COMMAND ${T_CFG} --gtest_filter=ConfigSourcesTest.CliOverridesPropagateToAppProperties
         WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+
+add_test(
+    NAME ${T_CFG}.env_default
+    COMMAND ${T_CFG} --gtest_filter=ConfigSourcesTest.JsonContentExpandsEnvWithDefaultValue
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+
+add_test(
+    NAME ${T_CFG}.env_override
+    COMMAND ${T_CFG} --gtest_filter=ConfigSourcesTest.JsonContentExpandsEnvOverridesDefault
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 # ----------------------------config_sources_yaml_test.cpp------------------------------
 set(T_CFG_YAML config_sources_yaml_test)
 add_executable(${T_CFG_YAML} config_sources_yaml_test.cpp)
@@ -81,10 +91,14 @@ endif()
 set_tests_properties(${T_CFG}.merge PROPERTIES LABELS "network")
 set_tests_properties(${T_CFG}.missing PROPERTIES LABELS "network")
 set_tests_properties(${T_CFG}.cli_overrides PROPERTIES LABELS "network")
+set_tests_properties(${T_CFG}.env_default PROPERTIES LABELS "network")
+set_tests_properties(${T_CFG}.env_override PROPERTIES LABELS "network")
 if("$ENV{HTTPCLIENT_SKIP_NETWORK_TESTS}" STREQUAL "1")
     set_tests_properties(${T_CFG}.merge PROPERTIES DISABLED TRUE)
     set_tests_properties(${T_CFG}.missing PROPERTIES DISABLED TRUE)
     set_tests_properties(${T_CFG}.cli_overrides PROPERTIES DISABLED TRUE)
+    set_tests_properties(${T_CFG}.env_default PROPERTIES DISABLED TRUE)
+    set_tests_properties(${T_CFG}.env_override PROPERTIES DISABLED TRUE)
 endif()
 #
 # unit tests:
