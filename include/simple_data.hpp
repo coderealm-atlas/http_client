@@ -42,6 +42,7 @@ struct LoggingConfig {
   std::string log_dir;
   std::string log_file;
   uint64_t rotation_size;
+  bool also_stderr{false};
   friend LoggingConfig tag_invoke(const json::value_to_tag<LoggingConfig>&,
                                   const json::value& jv) {
     std::vector<std::string> all_field_names = {"level", "log_dir", "log_file",
@@ -57,6 +58,9 @@ struct LoggingConfig {
     lc.log_dir = json::value_to<std::string>(jv.at("log_dir"));
     lc.log_file = json::value_to<std::string>(jv.at("log_file"));
     lc.rotation_size = jv.at("rotation_size").to_number<uint64_t>();
+    if (jv.as_object().contains("also_stderr")) {
+      lc.also_stderr = json::value_to<bool>(jv.at("also_stderr"));
+    }
     return lc;
   }
 };
