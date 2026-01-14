@@ -1,5 +1,7 @@
 #include "io_monad.hpp"
 
+#include "io_monad_poll_with_state.hpp"
+
 #include <gtest/gtest.h>  // Add this line
 
 #include <atomic>
@@ -216,6 +218,113 @@ TEST(CollectIOParallelTest, CollectsValuesInOriginalOrder) {
 
   ioc.run();
   EXPECT_TRUE(completed);
+}
+
+TEST(PollWithStateTest, StopsWhenDecideDone) {
+  boost::asio::io_context ioc;
+
+  struct State {
+    int last_attempt = 0;
+  };
+
+  int calls = 0;
+  auto job = [&calls](int attempt, State& st) -> IO<int> {
+    ++calls;
+    st.last_attempt = attempt;
+    return IO<int>::pure(attempt);
+  };
+
+  auto decide = [](int /*attempt*/, State& /*st*/,
+                   const Result<int, Error>& r) -> PollControl {
+    if (r.is_ok() && r.value() >= 3) {
+      return PollControl::done();
+    }
+    return PollControl::retry(std::chrono::milliseconds(1));
+  };
+
+  std::optional<Result<int, Error>> result_r;
+  poll_with_state<int>(5, std::chrono::milliseconds(1), ioc.get_executor(),
+                       State{}, job, decide)
+      .run([&](auto r) { result_r = std::move(r); });
+
+  ioc.run();
+  ASSERT_TRUE(result_r.has_value());
+  ASSERT_TRUE(result_r->is_ok()) << result_r->error();
+  EXPECT_EQ(result_r->value(), 3);
+  EXPECT_EQ(calls, 3);
+}
+
+TEST(PollWithStateTest, RetriesAndKeepsStateAcrossAttempts) {
+  boost::asio::io_context ioc;
+
+  struct State {
+    std::shared_ptr<std::string> last_err_what;
+  };
+
+  auto last_err = std::make_shared<std::string>("");
+  auto job = [](int attempt, State& /*st*/) -> IO<int> {
+    if (attempt <= 2) {
+      return IO<int>::fail(Error{9, "transient"});
+    }
+    return IO<int>::pure(42);
+  };
+
+  auto decide = [](int /*attempt*/, State& st,
+                   const Result<int, Error>& r) -> PollControl {
+    if (r.is_ok()) {
+      return PollControl::done();
+    }
+    *st.last_err_what = r.error().what;
+    return PollControl::retry(std::chrono::milliseconds(1));
+  };
+
+  std::optional<Result<int, Error>> result_r;
+  poll_with_state<int>(5, std::chrono::milliseconds(1), ioc.get_executor(),
+                       State{last_err}, job, decide)
+      .run([&](auto r) { result_r = std::move(r); });
+
+  ioc.run();
+  ASSERT_TRUE(result_r.has_value());
+  ASSERT_TRUE(result_r->is_ok()) << result_r->error();
+  EXPECT_EQ(result_r->value(), 42);
+  EXPECT_EQ(*last_err, "transient");
+}
+
+TEST(PollWithStateTest, ExhaustedUsesCustomError) {
+  boost::asio::io_context ioc;
+
+  struct State {
+    int last_attempt = 0;
+  };
+
+  auto job = [](int /*attempt*/, State& /*st*/) -> IO<int> {
+    return IO<int>::pure(0);
+  };
+
+  auto decide = [](int attempt, State& st,
+                   const Result<int, Error>& /*r*/) -> PollControl {
+    st.last_attempt = attempt;
+    return PollControl::retry(std::chrono::milliseconds(1));
+  };
+
+  auto on_exhausted = [](int attempts, State& st,
+                         const Result<int, Error>& /*last*/) -> Error {
+    return Error{123,
+                 "exhausted: attempts=" + std::to_string(attempts) +
+                     ", last_attempt=" + std::to_string(st.last_attempt)};
+  };
+
+  std::optional<Result<int, Error>> result_r;
+  poll_with_state<int>(3, std::chrono::milliseconds(1), ioc.get_executor(),
+                       State{}, job, decide, on_exhausted)
+      .run([&](auto r) { result_r = std::move(r); });
+
+  ioc.run();
+  ASSERT_TRUE(result_r.has_value());
+  ASSERT_TRUE(result_r->is_err());
+  EXPECT_EQ(result_r->error().code, 123);
+  EXPECT_NE(result_r->error().what.find("attempts=3"), std::string::npos);
+  EXPECT_NE(result_r->error().what.find("last_attempt=3"), std::string::npos);
 }
 
 TEST(CollectIOParallelTest, PropagatesFirstError) {

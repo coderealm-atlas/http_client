@@ -191,6 +191,14 @@ class session {
   }
 
   void do_request_proxy() {
+    auto proxy_desc = [this]() -> std::string {
+      if (!proxy_setting_) return "<null>";
+      return fmt::format("{}:{} from_env={} has_auth={}", proxy_setting_->host,
+                         proxy_setting_->port, proxy_setting_->from_env,
+                         !(proxy_setting_->username.empty() ||
+                           proxy_setting_->password.empty()));
+    };
+
     auto bracket_ipv6 = [](std::string_view host) -> std::string {
       if (host.empty()) return {};
       if (host.front() == '[') return std::string(host);
@@ -224,13 +232,19 @@ class session {
 
     proxy_stream_->expires_after(this->op_timeout());
     BOOST_LOG_SEV(lg, trivial::debug)
+    << "proxy connect via: " << proxy_desc();
+  BOOST_LOG_SEV(lg, trivial::debug)
         << "proxy request: " << proxy_req_.value();
     http::async_write(
         proxy_stream_.value(), proxy_req_.value(),
         [self = derived().shared_from_this()](boost::beast::error_code ec,
                                               std::size_t bytes_transferred) {
           BOOST_LOG_SEV(self->lg, trivial::debug)
-              << "proxy request done, bytes transferred: " << bytes_transferred;
+        << "proxy request done, bytes transferred: " << bytes_transferred
+        << ", proxy="
+        << (self->proxy_setting_ ? (self->proxy_setting_->host + ":" +
+                       self->proxy_setting_->port)
+                     : std::string{"<null>"});
           if (ec) {
             BOOST_LOG_SEV(self->lg, trivial::error)
                 << "write to proxy server: " << ec.message();
@@ -249,7 +263,11 @@ class session {
         [self = derived().shared_from_this()](boost::beast::error_code ec,
                                               std::size_t bytes_transferred) {
           BOOST_LOG_SEV(self->lg, trivial::debug)
-              << "proxy response: " << self->proxy_response_parser_->get();
+              << "proxy response via "
+              << (self->proxy_setting_ ? (self->proxy_setting_->host + ":" +
+                                             self->proxy_setting_->port)
+                                       : std::string{"<null>"})
+              << ": " << self->proxy_response_parser_->get();
           if (ec) {
             BOOST_LOG_SEV(self->lg, trivial::error)
                 << "read from proxy server: " << ec.message();
@@ -258,8 +276,11 @@ class session {
             // self->do_request();
             if (self->proxy_response_parser_->get().result_int() != 200) {
               BOOST_LOG_SEV(self->lg, trivial::error)
-                  << "proxy response: "
-                  << self->proxy_response_parser_->get().result_int();
+                  << "proxy response via "
+                  << (self->proxy_setting_ ? (self->proxy_setting_->host + ":" +
+                                                 self->proxy_setting_->port)
+                                           : std::string{"<null>"})
+                  << ": " << self->proxy_response_parser_->get().result_int();
               self->deliver(std::nullopt, 4);
               return;
             } else {
