@@ -41,6 +41,10 @@ struct HttpExchange {
   bool follow_redirect = true;
   logsrc::severity_logger<trivial::severity_level> lg;
   bool no_modify_req = false;
+  // If true, this request must NOT borrow a proxy from HttpClientManager's
+  // internal proxy pool even when one is configured. This allows callers to
+  // explicitly force a direct connection.
+  bool no_proxy_pool = false;
   std::shared_ptr<const ProxySetting> proxy{};
   Req request;
   std::optional<Res> response = std::nullopt;
@@ -613,7 +617,7 @@ auto http_request_io(HttpClientManager& pool, int verbose = 0) {
       request_params.no_modify_req = ex->no_modify_req;
       request_params.timeout = ex->timeout;
 
-      if (!ex->proxy && pool.has_proxy_pool()) {
+      if (!ex->proxy && !ex->no_proxy_pool && pool.has_proxy_pool()) {
         ex->proxy = pool.borrow_proxy();
       }
 
