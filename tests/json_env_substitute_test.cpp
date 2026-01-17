@@ -92,6 +92,25 @@ TEST(JSONEnvSubstitutionTest, MultipleOccurrencesAndMixedSources) {
   EXPECT_EQ(obj.at("nested").as_object().at("inner").as_string(), "beta");
 }
 
+TEST(JSONEnvSubstitutionTest, SupportsConcatenationAndNoPartialVarMatch) {
+  EnvGuard g1("VAR", "/v");
+  EnvGuard g2("VAR_NAME", "/base");
+
+  json::value v = json::parse(R"({
+    "path":"${VAR_NAME}/cert.pem",
+    "both":"a=${VAR_NAME} b=${VAR}",
+    "fallback":"${MISSING:-/tmp}/x"
+  })");
+  std::map<std::string, std::string> cli{};
+  std::map<std::string, std::string> properties{};
+  substitue_envs(v, cli, properties);
+
+  auto& o = v.as_object();
+  EXPECT_EQ(o.at("path").as_string(), "/base/cert.pem");
+  EXPECT_EQ(o.at("both").as_string(), "a=/base b=/v");
+  EXPECT_EQ(o.at("fallback").as_string(), "/tmp/x");
+}
+
 TEST(JSONEnvSubstitutionTest, NoChangeForNonStringKinds) {
   json::value v =
       json::parse(R"({"n":123, "b":true, "nullv":null, "arr":[1,false,null]})");
