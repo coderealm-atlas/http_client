@@ -221,8 +221,14 @@ class http_session_pooled
     pool_.set_op_timeout(*conn_, pool_io_timeout());
     buffer_.consume(buffer_.size());
     if (!parser_) parser_.emplace();
-    // Optional body limits/streaming can be configured by caller by customizing
-    // ResponseBody
+    if constexpr (std::is_same_v<ResponseBody, http::empty_body>) {
+      parser_->body_limit(0);
+      parser_->skip(true);
+    } else if constexpr (std::is_same_v<ResponseBody, http::string_body>) {
+      // Guard against unexpectedly large upstream responses that can trigger
+      // `std::bad_alloc` (the default is effectively unbounded).
+      parser_->body_limit(1024 * 1024 * 4);
+    }
     auto sp = this->shared_from_this();
     std::visit(
         [sp](auto& s) {
