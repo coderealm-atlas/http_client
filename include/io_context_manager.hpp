@@ -1,5 +1,6 @@
 #pragma once
 
+#include <chrono>
 #include <boost/asio/io_context.hpp>
 #include <thread>
 
@@ -27,6 +28,7 @@ class IoContextManager : public IIoContextManager {
   std::atomic<bool> stopped_{false};
   customio::IOutput& output_;
   std::atomic<int> instance_count_{0};
+  std::atomic<std::uint64_t> restart_count_{0};
 
  public:
   IoContextManager(cjj365::IIocConfigProvider& ioc_config_provider,
@@ -45,11 +47,43 @@ class IoContextManager : public IIoContextManager {
     for (int i = 0; i < threads_num_; ++i) {
       threads_.emplace_back([this, i] {
         OpenSslThreadCleanup openssl_guard;
-        try {
-          asio::io_context::count_type ct = ioc_.run();
-          output_.debug() << "io_context run count: " << ct << std::endl;
-        } catch (const std::exception& e) {
-          output_.error() << "io_context run exception: " << e.what();
+        for (;;) {
+          if (stopped_.load(std::memory_order_relaxed)) {
+            break;
+          }
+          try {
+            asio::io_context::count_type ct = ioc_.run();
+            if (stopped_.load(std::memory_order_relaxed)) {
+              break;
+            }
+            const auto n = restart_count_.fetch_add(1, std::memory_order_relaxed) + 1;
+            output_.warning() << "[IoContextManager] io_context run() exited unexpectedly"
+                              << " name=" << name_ << " index=" << i
+                              << " count=" << ct
+                              << " restart_count=" << n << std::endl;
+            ioc_.restart();
+          } catch (const std::exception& e) {
+            if (stopped_.load(std::memory_order_relaxed)) {
+              break;
+            }
+            const auto n = restart_count_.fetch_add(1, std::memory_order_relaxed) + 1;
+            output_.error() << "[IoContextManager] io_context run exception"
+                            << " name=" << name_ << " index=" << i
+                            << " what=" << e.what()
+                            << " restart_count=" << n << std::endl;
+            ioc_.restart();
+            std::this_thread::sleep_for(std::chrono::milliseconds(50));
+          } catch (...) {
+            if (stopped_.load(std::memory_order_relaxed)) {
+              break;
+            }
+            const auto n = restart_count_.fetch_add(1, std::memory_order_relaxed) + 1;
+            output_.error() << "[IoContextManager] io_context run unknown exception"
+                            << " name=" << name_ << " index=" << i
+                            << " restart_count=" << n << std::endl;
+            ioc_.restart();
+            std::this_thread::sleep_for(std::chrono::milliseconds(50));
+          }
         }
       });
       output_.debug() << "[IoContextManager] started worker thread index=" << i << std::endl;
