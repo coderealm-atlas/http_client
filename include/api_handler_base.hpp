@@ -38,12 +38,19 @@ struct ApiDataResponse {
 
   ApiDataResponse(std::vector<T>&& vec,
               const std::string& content_type = "application/json")
-      : data(std::move(vec)),
-        meta(resp::DataMeta{static_cast<int64_t>(vec.size()), 0, vec.size()}),
-        content_type(content_type) {}
+      : ApiDataResponse(std::move(vec),
+                        resp::DataMeta{static_cast<int64_t>(vec.size()), 0,
+                                       vec.size()},
+                        content_type) {}
   // Deleted constructor for lvalue reference to vector
   ApiDataResponse(const std::vector<T>&,
               const std::string& content_type = "application/json") = delete;
+
+  ApiDataResponse(std::vector<T>&& vec, resp::DataMeta meta,
+                  const std::string& content_type = "application/json")
+      : data(std::move(vec)),
+        meta(std::move(meta)),
+        content_type(content_type) {}
 
   ApiDataResponse(resp::ListResult<T>&& result)
       : data(std::move(result.data)),

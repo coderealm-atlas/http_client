@@ -1188,6 +1188,19 @@ TEST(ApiResponseTest, deleted_construct) {
   // it is deleted ApiDataResponse<int> response3(i);
 }
 
+TEST(ApiResponseTest, vector_construct_sets_meta_from_vector_size) {
+  using namespace apihandler;
+  std::vector<int> data{10, 20, 30};
+  ApiDataResponse<int> response(std::move(data));
+
+  ASSERT_TRUE(response.meta.has_value());
+  EXPECT_EQ(response.meta->total, 3);
+  EXPECT_EQ(response.meta->offset, 0u);
+  EXPECT_EQ(response.meta->limit, 3u);
+  ASSERT_TRUE(response.is_list());
+  EXPECT_EQ(std::get<std::vector<int>>(response.data).size(), 3u);
+}
+
 TEST(IOTest, current_dir) {
   std::cerr << std::filesystem::absolute(std::filesystem::current_path())
             << std::endl;
