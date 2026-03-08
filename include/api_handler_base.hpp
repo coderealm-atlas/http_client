@@ -216,6 +216,10 @@ struct ResponseGenerator {
     res.version(11);
     res.result(static_cast<http::status>(r.status));
     res.set(http::field::location, std::move(r.location));
+    // Keep redirect responses self-delimiting so clients do not wait for body
+    // bytes on empty redirects.
+    res.content_length(0);
+    res.keep_alive(false);
     res.prepare_payload();
     return make_io_response(std::move(res));
   }
