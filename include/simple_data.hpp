@@ -727,6 +727,7 @@ struct Permission {
 
 struct SessionAttributes {
   std::optional<int64_t> user_id;
+  std::optional<int64_t> apikey_id;
   std::optional<std::string> user_name;
   std::optional<std::string> user_email;
   std::optional<int64_t> created_at;
@@ -787,6 +788,9 @@ struct SessionAttributes {
 
     if (sa.user_id) {
       jo["user_id"] = sa.user_id.value();
+    }
+    if (sa.apikey_id) {
+      jo["apikey_id"] = sa.apikey_id.value();
     }
     if (sa.user_name) {
       jo["user_name"] = sa.user_name.value();
@@ -857,6 +861,9 @@ struct SessionAttributes {
       if (auto* user_id_p = jo_p->if_contains("user_id")) {
         sa.user_id.emplace(user_id_p->to_number<int64_t>());
       }
+      if (auto* apikey_id_p = jo_p->if_contains("apikey_id")) {
+        sa.apikey_id.emplace(apikey_id_p->to_number<int64_t>());
+      }
       if (auto* user_name_p = jo_p->if_contains("user_name")) {
         sa.user_name.emplace(user_name_p->as_string());
       }
@@ -872,6 +879,9 @@ struct SessionAttributes {
       if (auto* user_permissions_p = jo_p->if_contains("user_permissions")) {
         sa.user_permissions =
             json::value_to<std::vector<Permission>>(*user_permissions_p);
+      }
+      if (auto* auth_by_p = jo_p->if_contains("auth_by")) {
+        sa.auth_by = static_cast<AuthBy>(auth_by_p->to_number<int>());
       }
       if (auto* amr_p = jo_p->if_contains("amr")) {
         sa.amr = json::value_to<std::vector<std::string>>(*amr_p);
