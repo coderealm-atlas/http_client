@@ -740,6 +740,8 @@ struct SessionAttributes {
   std::optional<std::string> user_state;
   std::optional<int64_t> email_verified_at;
   std::optional<bool> email_verified;
+  std::optional<int64_t> phone_verified_at;
+  std::optional<bool> phone_verified;
   AuthBy auth_by = AuthBy::USERNAME_PASSWORD;
 
   // Auth context fields
@@ -851,6 +853,12 @@ struct SessionAttributes {
     if (sa.email_verified.has_value()) {
       jo["email_verified"] = *sa.email_verified;
     }
+    if (sa.phone_verified_at) {
+      jo["phone_verified_at"] = *sa.phone_verified_at;
+    }
+    if (sa.phone_verified.has_value()) {
+      jo["phone_verified"] = *sa.phone_verified;
+    }
     jv = std::move(jo);
   }
 
@@ -924,6 +932,12 @@ struct SessionAttributes {
       }
       if (auto* verified_p = jo_p->if_contains("email_verified")) {
         sa.email_verified.emplace(verified_p->as_bool());
+      }
+      if (auto* verified_at_p = jo_p->if_contains("phone_verified_at")) {
+        sa.phone_verified_at.emplace(verified_at_p->to_number<int64_t>());
+      }
+      if (auto* verified_p = jo_p->if_contains("phone_verified")) {
+        sa.phone_verified.emplace(verified_p->as_bool());
       }
     }
     return sa;
