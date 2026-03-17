@@ -866,6 +866,34 @@ struct SessionAttributes {
       const json::value_to_tag<SessionAttributes>&, const json::value& jv) {
     SessionAttributes sa;
     if (auto* jo_p = jv.if_object()) {
+      auto parse_optional_bool =
+          [jo_p](const char* key) -> std::optional<bool> {
+        auto* v = jo_p->if_contains(key);
+        if (!v || v->is_null()) {
+          return std::nullopt;
+        }
+        if (v->is_bool()) {
+          return v->as_bool();
+        }
+        if (v->is_int64()) {
+          return v->as_int64() != 0;
+        }
+        if (v->is_uint64()) {
+          return v->as_uint64() != 0;
+        }
+        if (v->is_string()) {
+          auto sv = v->as_string();
+          std::string_view s{sv.data(), sv.size()};
+          if (s == "true" || s == "1") {
+            return true;
+          }
+          if (s == "false" || s == "0") {
+            return false;
+          }
+        }
+        return std::nullopt;
+      };
+
       if (auto* user_id_p = jo_p->if_contains("user_id")) {
         sa.user_id.emplace(user_id_p->to_number<int64_t>());
       }
@@ -900,17 +928,17 @@ struct SessionAttributes {
       if (auto* auth_time_p = jo_p->if_contains("auth_time")) {
         sa.auth_time.emplace(auth_time_p->to_number<int64_t>());
       }
-      if (auto* mfa_p = jo_p->if_contains("mfa")) {
-        sa.mfa.emplace(mfa_p->as_bool());
+      if (auto b = parse_optional_bool("mfa")) {
+        sa.mfa = *b;
       }
-      if (auto* platform_p = jo_p->if_contains("webauthn_platform")) {
-        sa.webauthn_platform.emplace(platform_p->as_bool());
+      if (auto b = parse_optional_bool("webauthn_platform")) {
+        sa.webauthn_platform = *b;
       }
       if (auto* cred_id_p = jo_p->if_contains("credential_id")) {
         sa.credential_id.emplace(cred_id_p->as_string());
       }
-      if (auto* attest_p = jo_p->if_contains("attestation_verified")) {
-        sa.attestation_verified.emplace(attest_p->as_bool());
+      if (auto b = parse_optional_bool("attestation_verified")) {
+        sa.attestation_verified = *b;
       }
       if (auto* country_p = jo_p->if_contains("country_of_residence")) {
         sa.country_of_residence.emplace(country_p->as_string());
@@ -930,14 +958,14 @@ struct SessionAttributes {
       if (auto* verified_at_p = jo_p->if_contains("email_verified_at")) {
         sa.email_verified_at.emplace(verified_at_p->to_number<int64_t>());
       }
-      if (auto* verified_p = jo_p->if_contains("email_verified")) {
-        sa.email_verified.emplace(verified_p->as_bool());
+      if (auto b = parse_optional_bool("email_verified")) {
+        sa.email_verified = *b;
       }
       if (auto* verified_at_p = jo_p->if_contains("phone_verified_at")) {
         sa.phone_verified_at.emplace(verified_at_p->to_number<int64_t>());
       }
-      if (auto* verified_p = jo_p->if_contains("phone_verified")) {
-        sa.phone_verified.emplace(verified_p->as_bool());
+      if (auto b = parse_optional_bool("phone_verified")) {
+        sa.phone_verified = *b;
       }
     }
     return sa;

@@ -29,6 +29,12 @@ MyResult<std::reference_wrapper<const json::object>> reference_object_at(
 MyResult<std::reference_wrapper<const json::value>> reference_value_at(
     const json::value& val, std::string_view k1);
 bool bool_from_json_ob(const json::value& jv, const std::string& key);
+MyResult<bool> bool_with_context(const json::value& jv,
+                                 std::string_view field_path);
+MyResult<bool> bool_with_context(const json::object& obj,
+                                 std::string_view field_name);
+bool bool_or_throw(const json::value& jv, std::string_view field_path);
+bool bool_or_throw(const json::object& obj, std::string_view field_name);
 
 std::string replace_env_var(
     const std::string& input,

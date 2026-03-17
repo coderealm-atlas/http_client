@@ -9,11 +9,74 @@
 #include <cstdlib>  // for std::getenv
 #include <fmt/format.h>
 #include <iostream>
+#include <optional>
 #include <string>
 
 #include "result_monad.hpp"
 
 namespace jsonutil {
+
+namespace {
+
+std::string json_kind_name(const json::value& jv) {
+  switch (jv.kind()) {
+    case json::kind::null:
+      return "null";
+    case json::kind::bool_:
+      return "bool";
+    case json::kind::int64:
+      return "int64";
+    case json::kind::uint64:
+      return "uint64";
+    case json::kind::double_:
+      return "double";
+    case json::kind::string:
+      return "string";
+    case json::kind::array:
+      return "array";
+    case json::kind::object:
+      return "object";
+  }
+  return "unknown";
+}
+
+std::optional<bool> parse_bool_like(const json::value& jv) {
+  if (jv.is_bool()) {
+    return jv.get_bool();
+  }
+  if (jv.is_int64()) {
+    const auto value = jv.get_int64();
+    if (value == 0) return false;
+    if (value == 1) return true;
+    return std::nullopt;
+  }
+  if (jv.is_uint64()) {
+    const auto value = jv.get_uint64();
+    if (value == 0) return false;
+    if (value == 1) return true;
+    return std::nullopt;
+  }
+  if (auto* str = jv.if_string()) {
+    std::string normalized;
+    normalized.reserve(str->size());
+    for (char ch : *str) {
+      normalized.push_back(
+          static_cast<char>(std::tolower(static_cast<unsigned char>(ch))));
+    }
+    if (normalized == "true" || normalized == "1" || normalized == "yes" ||
+        normalized == "on") {
+      return true;
+    }
+    if (normalized == "false" || normalized == "0" || normalized == "no" ||
+        normalized == "off") {
+      return false;
+    }
+  }
+  return std::nullopt;
+}
+
+}  // namespace
+
 MyResult<json::object> consume_object_at(json::value&& val,
                                          std::string_view k1) {
   if (auto* ob_p = val.if_object()) {
@@ -72,27 +135,32 @@ MyResult<std::reference_wrapper<const json::value>> reference_value_at(
 
 MyResult<json::object> expect_object_at(json::value&& val, std::string_view k1,
                                         std::string_view k2) {
-  if (!val.is_object())
-  return MyResult<json::object>::Err(
-    monad::make_error(1, "Not an json::object at root"));
+  if (!val.is_object()) {
+    return MyResult<json::object>::Err(
+        monad::make_error(1, "Not an json::object at root"));
+  }
 
   auto& obj1 = val.as_object();
   auto it1 = obj1.find(k1);
-  if (it1 == obj1.end())
-  return MyResult<json::object>::Err(
-    monad::make_error(2, "Key not found: " + std::string(k1)));
-  if (!it1->value().is_object())
-  return MyResult<json::object>::Err(
-    monad::make_error(3, "Expected json::object at key: " + std::string(k1)));
+  if (it1 == obj1.end()) {
+    return MyResult<json::object>::Err(
+        monad::make_error(2, "Key not found: " + std::string(k1)));
+  }
+  if (!it1->value().is_object()) {
+    return MyResult<json::object>::Err(monad::make_error(
+        3, "Expected json::object at key: " + std::string(k1)));
+  }
 
   auto& obj2 = it1->value().as_object();
   auto it2 = obj2.find(k2);
-  if (it2 == obj2.end())
-  return MyResult<json::object>::Err(
-    monad::make_error(4, "Key not found: " + std::string(k2)));
-  if (!it2->value().is_object())
-  return MyResult<json::object>::Err(
-    monad::make_error(5, "Expected json::object at key: " + std::string(k2)));
+  if (it2 == obj2.end()) {
+    return MyResult<json::object>::Err(
+        monad::make_error(4, "Key not found: " + std::string(k2)));
+  }
+  if (!it2->value().is_object()) {
+    return MyResult<json::object>::Err(monad::make_error(
+        5, "Expected json::object at key: " + std::string(k2)));
+  }
 
   return MyResult<json::object>::Ok(std::move(it2->value().as_object()));
 }
@@ -100,36 +168,43 @@ MyResult<json::object> expect_object_at(json::value&& val, std::string_view k1,
 MyResult<json::object> expect_object_at(json::value&& val, std::string_view k1,
                                         std::string_view k2,
                                         std::string_view k3) {
-  if (!val.is_object())
-  return MyResult<json::object>::Err(
-    monad::make_error(1, "Not an json::object at root"));
+  if (!val.is_object()) {
+    return MyResult<json::object>::Err(
+        monad::make_error(1, "Not an json::object at root"));
+  }
 
   auto& obj1 = val.as_object();
   auto it1 = obj1.find(k1);
-  if (it1 == obj1.end())
-  return MyResult<json::object>::Err(
-    monad::make_error(2, "Key not found: " + std::string(k1)));
-  if (!it1->value().is_object())
-  return MyResult<json::object>::Err(
-    monad::make_error(3, "Expected json::object at key: " + std::string(k1)));
+  if (it1 == obj1.end()) {
+    return MyResult<json::object>::Err(
+        monad::make_error(2, "Key not found: " + std::string(k1)));
+  }
+  if (!it1->value().is_object()) {
+    return MyResult<json::object>::Err(monad::make_error(
+        3, "Expected json::object at key: " + std::string(k1)));
+  }
 
   auto& obj2 = it1->value().as_object();
   auto it2 = obj2.find(k2);
-  if (it2 == obj2.end())
-  return MyResult<json::object>::Err(
-    monad::make_error(4, "Key not found: " + std::string(k2)));
-  if (!it2->value().is_object())
-  return MyResult<json::object>::Err(
-    monad::make_error(5, "Expected json::object at key: " + std::string(k2)));
+  if (it2 == obj2.end()) {
+    return MyResult<json::object>::Err(
+        monad::make_error(4, "Key not found: " + std::string(k2)));
+  }
+  if (!it2->value().is_object()) {
+    return MyResult<json::object>::Err(monad::make_error(
+        5, "Expected json::object at key: " + std::string(k2)));
+  }
 
   auto& obj3 = it2->value().as_object();
   auto it3 = obj3.find(k3);
-  if (it3 == obj3.end())
-  return MyResult<json::object>::Err(
-    monad::make_error(6, "Key not found: " + std::string(k3)));
-  if (!it3->value().is_object())
-  return MyResult<json::object>::Err(
-    monad::make_error(7, "Expected json::object at key: " + std::string(k3)));
+  if (it3 == obj3.end()) {
+    return MyResult<json::object>::Err(
+        monad::make_error(6, "Key not found: " + std::string(k3)));
+  }
+  if (!it3->value().is_object()) {
+    return MyResult<json::object>::Err(monad::make_error(
+        7, "Expected json::object at key: " + std::string(k3)));
+  }
 
   return MyResult<json::object>::Ok(std::move(it3->value().as_object()));
 }
@@ -333,6 +408,42 @@ bool bool_from_json_ob(const json::value& jv, const std::string& key) {
               << std::endl;
     return false;
   }
+}
+
+MyResult<bool> bool_with_context(const json::value& jv,
+                                 std::string_view field_path) {
+  if (auto parsed = parse_bool_like(jv)) {
+    return MyResult<bool>::Ok(*parsed);
+  }
+  return MyResult<bool>::Err(monad::make_error(
+      1,
+      fmt::format("Invalid boolean for '{}': got {} value {}",
+                  field_path, json_kind_name(jv), json::serialize(jv))));
+}
+
+MyResult<bool> bool_with_context(const json::object& obj,
+                                 std::string_view field_name) {
+  if (auto* value = obj.if_contains(field_name)) {
+    return bool_with_context(*value, field_name);
+  }
+  return MyResult<bool>::Err(monad::make_error(
+      1, fmt::format("Missing boolean field '{}'", field_name)));
+}
+
+bool bool_or_throw(const json::value& jv, std::string_view field_path) {
+  auto result = bool_with_context(jv, field_path);
+  if (result.is_err()) {
+    throw std::runtime_error(result.error().what);
+  }
+  return result.value();
+}
+
+bool bool_or_throw(const json::object& obj, std::string_view field_name) {
+  auto result = bool_with_context(obj, field_name);
+  if (result.is_err()) {
+    throw std::runtime_error(result.error().what);
+  }
+  return result.value();
 }
 
 std::string indent(int level) { return std::string(level * 2, ' '); }

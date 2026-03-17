@@ -93,7 +93,8 @@ struct ProxySetting {
       proxy.username = jo->at("username").as_string().c_str();
       proxy.password = jo->at("password").as_string().c_str();
       if (auto* disabled_p = jo->if_contains("disabled")) {
-        proxy.disabled = json::value_to<bool>(*disabled_p);
+        proxy.disabled = jsonutil::bool_or_throw(
+            *disabled_p, "httpclient_config.proxy_pool[].disabled");
       } else {
         proxy.disabled = false;
       }
@@ -178,7 +179,8 @@ class HttpclientConfig {
               json::value_to<std::vector<std::string>>(*verify_paths_p);
         }
         if (auto* insecure_p = jo->if_contains("insecure_skip_verify")) {
-          config.insecure_skip_verify = json::value_to<bool>(*insecure_p);
+          config.insecure_skip_verify = jsonutil::bool_or_throw(
+              *insecure_p, "httpclient_config.insecure_skip_verify");
         }
         if (auto* certificates_p = jo->if_contains("certificates")) {
           config.certificates =
