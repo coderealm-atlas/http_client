@@ -123,13 +123,14 @@ struct HttpExchange {
 
   MyVoidResult expect_2xx() {
     if (!response.has_value()) {
-      return MyVoidResult::Err(
-          Error{400, fmt::format("Response is not available, url={}", url.buffer())});
+      return MyVoidResult::Err(Error{
+          400, fmt::format("Response is not available, url={}", url.buffer())});
     }
     int status = static_cast<int>(response->result_int());
     if (status < 200 || status >= 300) {
       std::string body_preview;
-      if constexpr (std::is_same_v<typename Res::body_type, http::string_body>) {
+      if constexpr (std::is_same_v<typename Res::body_type,
+                                   http::string_body>) {
         const auto& body = response->body();
         if (!body.empty()) {
           body_preview = make_preview(body);
@@ -137,18 +138,14 @@ struct HttpExchange {
       }
 
       if (!body_preview.empty()) {
-        return MyVoidResult::Err(Error{
-            status,
-            fmt::format("Expected 2xx response, got {}, url={}, body={}",
-                        status,
-                        url.buffer(),
-                        body_preview)});
+        return MyVoidResult::Err(
+            Error{status,
+                  fmt::format("Expected 2xx response, got {}, url={}, body={}",
+                              status, url.buffer(), body_preview)});
       }
-      return MyVoidResult::Err(Error{
-          status,
-          fmt::format("Expected 2xx response, got {}, url={}",
-                      status,
-                      url.buffer())});
+      return MyVoidResult::Err(
+          Error{status, fmt::format("Expected 2xx response, got {}, url={}",
+                                    status, url.buffer())});
     }
     return MyVoidResult::Ok();
   }

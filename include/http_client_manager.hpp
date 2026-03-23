@@ -8,7 +8,6 @@
 #include <string>
 #include <string_view>
 #include <utility>
-#include <boost/system/result.hpp>
 
 #include "beast_connection_pool.hpp"
 #include "client_ssl_ctx.hpp"
@@ -342,11 +341,18 @@ class HttpClientManager {
                int)>&& callback,
       HttpClientRequestParams&& params = {},
       const cjj365::ProxySetting* proxy_setting = nullptr) {
-    if (params.follow_redirect) {
-      // Reuse the non-pooled implementation for redirect chains.
-      return http_request<RequestBody, ResponseBody>(
-          url_input, std::move(req), std::move(callback), std::move(params),
-          proxy_setting);
+    using request_t =
+        http::request<RequestBody, http::basic_fields<std::allocator<char>>>;
+    if constexpr (std::is_copy_constructible_v<request_t>) {
+      if (params.follow_redirect) {
+        // Reuse the non-pooled implementation for redirect chains.
+        return http_request<RequestBody, ResponseBody>(
+            url_input, std::move(req), std::move(callback), std::move(params),
+            proxy_setting);
+      }
+    } else if (params.follow_redirect) {
+      callback(std::nullopt, 9);
+      return;
     }
     // Build origin for pool acquisition
     urls::url url(url_input);
