@@ -296,7 +296,16 @@ void substitue_envs(boost::json::value& jv,
       std::string original = jv.get_string().c_str();
       std::string substituted =
           replace_env_var(original, cli_map, properties_map);
-      jv = substituted;  // Update the JSON value with substituted string
+      // Coerce "true"/"false" strings (from env-var substitution) to native
+      // JSON booleans so that parsers using is_bool()/as_bool() work correctly
+      // with patterns like ${ENV:-false}.
+      if (substituted == "true") {
+        jv = true;
+      } else if (substituted == "false") {
+        jv = false;
+      } else {
+        jv = substituted;
+      }
       break;
     }
     case boost::json::kind::uint64:
