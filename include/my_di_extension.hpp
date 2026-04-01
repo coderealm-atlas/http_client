@@ -97,6 +97,26 @@ auto safe_factory_binding() {
   });
 }
 
+template <typename Impl, typename OwnedDep, typename... Deps>
+auto safe_factory_binding_with_shared_owner() {
+  using Factory = typename Impl::Factory;
+  return boost::di::bind<Factory>().to([](const auto& inj) {
+    auto owned_dep = inj.template create<std::shared_ptr<OwnedDep>>();
+    auto deps =
+        std::tuple<std::reference_wrapper<std::remove_reference_t<Deps>>...>{
+            std::ref(inj.template create<Deps&>())...};
+    return Factory{[owned_dep, deps]() mutable {
+      return std::apply(
+          [&owned_dep](auto&... drefs) {
+            return std::shared_ptr<Impl>(
+                new Impl(*owned_dep, drefs.get()...),
+                [owned_dep](Impl* ptr) mutable { delete ptr; });
+          },
+          deps);
+    }};
+  });
+}
+
 template <typename Interface, typename Impl, typename... Deps>
 auto safe_factory_binding_for() {
   static_assert(std::is_base_of_v<Interface, Impl>,
