@@ -153,6 +153,11 @@ class TaskDeduplicator {
     return false;
   }
 
+  void unmark(const Key& key) {
+    std::lock_guard<std::mutex> lock(_mutex);
+    _executed.erase(key);
+  }
+
  private:
   std::unordered_map<Key, TimePoint> _executed;
   Duration _ttl;
