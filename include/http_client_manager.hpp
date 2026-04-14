@@ -14,6 +14,7 @@
 #include "http_client_config_provider.hpp"
 #include "http_session.hpp"
 #include "http_session_pooled.hpp"
+#include "http_session_stream.hpp"
 #include "proxy_pool.hpp"
 
 namespace asio = boost::asio;
@@ -211,6 +212,50 @@ class HttpClientManager {
       target.append(enc_query);
     }
     req.target(target);
+  }
+
+ public:
+  template <class RequestBody>
+  void http_request_stream(
+      const urls::url_view& url_input,
+      http::request<RequestBody, http::basic_fields<std::allocator<char>>>&&
+          req,
+      std::function<void(http::response<
+                         http::empty_body,
+                         http::basic_fields<std::allocator<char>>>&&)>
+          on_headers,
+      std::function<void(std::string&&)> on_chunk,
+      std::function<void(std::optional<http::response<
+                           http::string_body,
+                           http::basic_fields<std::allocator<char>>>>&&,
+                         int)>&& callback,
+      HttpClientRequestParams&& params = {},
+      const cjj365::ProxySetting* proxy_setting = nullptr) {
+    if (params.follow_redirect) {
+      // Streaming path intentionally does not follow redirects automatically.
+      params.follow_redirect = false;
+    }
+    urls::url url(url_input);
+    if (!params.no_modify_req) {
+      update_request_target_for_url(req, url);
+    }
+    if (url.scheme() == "https") {
+      auto session =
+          std::make_shared<session_stream_ssl<RequestBody, std::allocator<char>>>(
+              *(this->ioc), this->client_ssl_ctx.context(), std::move(url),
+              HttpClientRequestParams{std::move(params)}, std::move(callback),
+              std::move(on_headers), std::move(on_chunk), proxy_setting);
+      session->set_req(std::move(req));
+      session->run();
+      return;
+    }
+    auto session =
+        std::make_shared<session_stream_plain<RequestBody, std::allocator<char>>>(
+            *(this->ioc), std::move(url),
+            HttpClientRequestParams{std::move(params)}, std::move(callback),
+            std::move(on_headers), std::move(on_chunk), proxy_setting);
+    session->set_req(std::move(req));
+    session->run();
   }
 
  public:

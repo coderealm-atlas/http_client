@@ -87,6 +87,7 @@ class session {
   std::chrono::seconds resolve_timeout() const { return resolve_to_; }
   std::chrono::seconds connect_timeout() const { return connect_to_; }
   std::chrono::seconds handshake_timeout() const { return handshake_to_; }
+  boost::beast::flat_buffer& read_buffer() { return buffer_; }
 
   void deliver(response_t&& r, int code) noexcept {
     try {

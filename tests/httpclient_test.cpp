@@ -46,6 +46,16 @@ namespace http = boost::beast::http;
 namespace ssl = boost::asio::ssl;
 using tcp = net::ip::tcp;
 
+unsigned short reserve_then_release_loopback_port() {
+  net::io_context ioc;
+  tcp::acceptor acceptor(
+      ioc, tcp::endpoint(net::ip::make_address("127.0.0.1"), 0), true);
+  const auto port = acceptor.local_endpoint().port();
+  boost::system::error_code ec;
+  acceptor.close(ec);
+  return port;
+}
+
 struct KeepAliveServer {
   net::io_context ioc{1};
   tcp::acceptor acceptor;
@@ -112,7 +122,20 @@ struct KeepAliveServer {
                            res->set(http::field::server, "local-keep-alive");
                            res->set(http::field::content_type, "text/plain");
                            res->keep_alive(true);
-                           res->body() = "ok";
+                           const std::string req_target =
+                               std::string(self->req.target());
+                           if (req_target.rfind("/redirect", 0) == 0) {
+                             res->result(http::status::found);
+                             res->set(http::field::location, "/final");
+                             res->body() = "redirect";
+                           } else if (req_target.rfind("/echo_target", 0) ==
+                                      0) {
+                             res->body() = req_target;
+                           } else if (req_target.rfind("/final", 0) == 0) {
+                             res->body() = "ok-final";
+                           } else {
+                             res->body() = "ok";
+                           }
                            res->prepare_payload();
                            res->set("X-Conn-Id",
                                     fmt::format("{}", (const void*)self->sock.get()));
@@ -493,6 +516,208 @@ TEST(HttpClientTest, PooledReuseLocal) {
 
   http_client_->stop();
   server.stop();
+}
+
+TEST(HttpClientTest, StreamPlainCallbacksAndResponse) {
+  KeepAliveServer server;
+  server.run_async();
+
+  cjj365::AppProperties app_properties{config_sources()};
+  auto http_client_config_provider =
+      std::make_shared<cjj365::HttpclientConfigProviderFile>(app_properties,
+                                                             config_sources());
+  cjj365::ClientSSLContext client_ssl_ctx(*http_client_config_provider);
+  auto http_client_ = std::make_unique<client_async::HttpClientManager>(
+      client_ssl_ctx, *http_client_config_provider);
+
+  std::string url =
+      fmt::format("http://127.0.0.1:{}/stream?name=test", server.port);
+  http::request<http::string_body> req{http::verb::get, "/ignored", 11};
+  req.set(http::field::host, fmt::format("127.0.0.1:{}", server.port));
+  req.set(http::field::user_agent, "stream-test");
+
+  bool headers_called = false;
+  int headers_status = 0;
+  std::string streamed_body;
+  std::optional<int> callback_code;
+  std::optional<int> status;
+  std::optional<std::string> body;
+  misc::ThreadNotifier notifier{5000};
+
+  http_client_->http_request_stream<http::string_body>(
+      urls::url_view(url), std::move(req),
+      [&](http::response<http::empty_body>&& headers) {
+        headers_called = true;
+        headers_status = headers.result_int();
+      },
+      [&](std::string&& chunk) { streamed_body += chunk; },
+      [&](std::optional<http::response<http::string_body>>&& res, int code) {
+        callback_code = code;
+        if (res) {
+          status = res->result_int();
+          body = res->body();
+        }
+        notifier.notify();
+      });
+
+  notifier.waitForNotification();
+
+  ASSERT_TRUE(callback_code.has_value());
+  ASSERT_EQ(*callback_code, 0);
+  ASSERT_TRUE(status.has_value());
+  ASSERT_EQ(*status, 200);
+  ASSERT_TRUE(body.has_value());
+  EXPECT_EQ(*body, "ok");
+  ASSERT_TRUE(headers_called);
+  EXPECT_EQ(headers_status, 200);
+  EXPECT_EQ(streamed_body, "ok");
+
+  http_client_->stop();
+  server.stop();
+}
+
+TEST(HttpClientTest, StreamPlainNoModifyReqPreservesRequestTarget) {
+  KeepAliveServer server;
+  server.run_async();
+
+  cjj365::AppProperties app_properties{config_sources()};
+  auto http_client_config_provider =
+      std::make_shared<cjj365::HttpclientConfigProviderFile>(app_properties,
+                                                             config_sources());
+  cjj365::ClientSSLContext client_ssl_ctx(*http_client_config_provider);
+  auto http_client_ = std::make_unique<client_async::HttpClientManager>(
+      client_ssl_ctx, *http_client_config_provider);
+
+  std::string url = fmt::format("http://127.0.0.1:{}/from-url?z=9", server.port);
+  http::request<http::string_body> req{http::verb::get, "/echo_target?x=1", 11};
+  req.set(http::field::host, fmt::format("127.0.0.1:{}", server.port));
+  req.set(http::field::user_agent, "stream-test-no-modify");
+
+  client_async::HttpClientRequestParams params;
+  params.no_modify_req = true;
+
+  std::optional<int> callback_code;
+  std::optional<std::string> body;
+  misc::ThreadNotifier notifier{5000};
+
+  http_client_->http_request_stream<http::string_body>(
+      urls::url_view(url), std::move(req),
+      [&](http::response<http::empty_body>&&) {},
+      [&](std::string&&) {},
+      [&](std::optional<http::response<http::string_body>>&& res, int code) {
+        callback_code = code;
+        if (res) {
+          body = res->body();
+        }
+        notifier.notify();
+      },
+      client_async::HttpClientRequestParams{params});
+
+  notifier.waitForNotification();
+  ASSERT_TRUE(callback_code.has_value());
+  ASSERT_EQ(*callback_code, 0);
+  ASSERT_TRUE(body.has_value());
+  EXPECT_EQ(*body, "/echo_target?x=1");
+
+  http_client_->stop();
+  server.stop();
+}
+
+TEST(HttpClientTest, StreamPathDoesNotFollowRedirects) {
+  KeepAliveServer server;
+  server.run_async();
+
+  cjj365::AppProperties app_properties{config_sources()};
+  auto http_client_config_provider =
+      std::make_shared<cjj365::HttpclientConfigProviderFile>(app_properties,
+                                                             config_sources());
+  cjj365::ClientSSLContext client_ssl_ctx(*http_client_config_provider);
+  auto http_client_ = std::make_unique<client_async::HttpClientManager>(
+      client_ssl_ctx, *http_client_config_provider);
+
+  std::string url = fmt::format("http://127.0.0.1:{}/redirect", server.port);
+  http::request<http::string_body> req{http::verb::get, "/ignored", 11};
+  req.set(http::field::host, fmt::format("127.0.0.1:{}", server.port));
+  req.set(http::field::user_agent, "stream-test-redirect");
+
+  client_async::HttpClientRequestParams params;
+  params.follow_redirect = true;
+
+  std::optional<int> callback_code;
+  std::optional<int> status;
+  std::optional<std::string> body;
+  misc::ThreadNotifier notifier{5000};
+
+  http_client_->http_request_stream<http::string_body>(
+      urls::url_view(url), std::move(req), [&](http::response<http::empty_body>&&) {},
+      [&](std::string&&) {},
+      [&](std::optional<http::response<http::string_body>>&& res, int code) {
+        callback_code = code;
+        if (res) {
+          status = res->result_int();
+          body = res->body();
+        }
+        notifier.notify();
+      },
+      client_async::HttpClientRequestParams{params});
+
+  notifier.waitForNotification();
+  ASSERT_TRUE(callback_code.has_value());
+  ASSERT_EQ(*callback_code, 0);
+  ASSERT_TRUE(status.has_value());
+  EXPECT_EQ(*status, 302);
+  ASSERT_TRUE(body.has_value());
+  EXPECT_EQ(*body, "redirect");
+
+  http_client_->stop();
+  server.stop();
+}
+
+TEST(HttpClientTest, StreamPlainConnectFailureReportsError) {
+  cjj365::AppProperties app_properties{config_sources()};
+  auto http_client_config_provider =
+      std::make_shared<cjj365::HttpclientConfigProviderFile>(app_properties,
+                                                             config_sources());
+  cjj365::ClientSSLContext client_ssl_ctx(*http_client_config_provider);
+  auto http_client_ = std::make_unique<client_async::HttpClientManager>(
+      client_ssl_ctx, *http_client_config_provider);
+
+  const auto unused_port = reserve_then_release_loopback_port();
+  const std::string url =
+      fmt::format("http://127.0.0.1:{}/should-fail", unused_port);
+  http::request<http::string_body> req{http::verb::get, "/ignored", 11};
+  req.set(http::field::host, fmt::format("127.0.0.1:{}", unused_port));
+  req.set(http::field::user_agent, "stream-test-connect-failure");
+
+  bool headers_called = false;
+  bool chunk_called = false;
+  std::optional<int> callback_code;
+  bool has_response = true;
+  misc::ThreadNotifier notifier{5000};
+
+  client_async::HttpClientRequestParams params;
+  params.connect_timeout = std::chrono::seconds(1);
+  params.io_timeout = std::chrono::seconds(1);
+
+  http_client_->http_request_stream<http::string_body>(
+      urls::url_view(url), std::move(req),
+      [&](http::response<http::empty_body>&&) { headers_called = true; },
+      [&](std::string&&) { chunk_called = true; },
+      [&](std::optional<http::response<http::string_body>>&& res, int code) {
+        callback_code = code;
+        has_response = res.has_value();
+        notifier.notify();
+      },
+      client_async::HttpClientRequestParams{params});
+
+  notifier.waitForNotification();
+  ASSERT_TRUE(callback_code.has_value());
+  EXPECT_EQ(*callback_code, 5);
+  EXPECT_FALSE(headers_called);
+  EXPECT_FALSE(chunk_called);
+  EXPECT_FALSE(has_response);
+
+  http_client_->stop();
 }
 
 TEST(HttpClientTest, PooledProxyHttps) {
