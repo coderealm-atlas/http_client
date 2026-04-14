@@ -50,6 +50,9 @@ class http_session_pooled
       : pool_(pool), origin_(std::move(origin)), proxy_(std::move(proxy)) {}
 
   void set_request(request_t req) { req_ = std::move(req); }
+  void set_io_timeout(std::chrono::seconds timeout) {
+    io_timeout_override_ = timeout;
+  }
   void run(callback_t cb) {
     callback_ = std::move(cb);
     // Acquire a transport connection: use proxy endpoint if configured
@@ -245,6 +248,9 @@ class http_session_pooled
   }
 
   std::chrono::seconds pool_io_timeout() const {
+    if (io_timeout_override_.has_value()) {
+      return *io_timeout_override_;
+    }
     return pool_.config().io_timeout;
   }
   std::chrono::seconds pool_handshake_timeout() const {
@@ -270,6 +276,7 @@ class http_session_pooled
   std::string connect_authority_{};
   beast_pool::Connection::Ptr conn_{};
   callback_t callback_{};
+  std::optional<std::chrono::seconds> io_timeout_override_{};
 };
 
 }  // namespace client_async

@@ -633,6 +633,13 @@ auto http_request_io(HttpClientManager& pool, int verbose = 0) {
       request_params.follow_redirect = ex->follow_redirect;
       request_params.no_modify_req = ex->no_modify_req;
       request_params.timeout = ex->timeout;
+      // Keep split timeouts aligned with the caller's requested timeout.
+      // Otherwise http_session defaults each operation timeout to 30s and can
+      // cancel long-running upstream reads even when `timeout` is larger.
+      request_params.resolve_timeout = ex->timeout;
+      request_params.connect_timeout = ex->timeout;
+      request_params.handshake_timeout = ex->timeout;
+      request_params.io_timeout = ex->timeout;
 
       if (!ex->proxy && !ex->no_proxy_pool && pool.has_proxy_pool()) {
         ex->proxy = pool.borrow_proxy();

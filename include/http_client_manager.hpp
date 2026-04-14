@@ -377,6 +377,9 @@ class HttpClientManager {
                                                      std::allocator<char>>;
     auto session =
         std::make_shared<Pooled>(*pool_, std::move(origin), std::move(proxy));
+    if (params.timeout.count() > 0) {
+      session->set_io_timeout(params.timeout);
+    }
     session->set_request(std::move(req));
     session->run(std::move(callback));
   }
