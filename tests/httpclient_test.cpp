@@ -623,6 +623,61 @@ TEST(HttpClientTest, StreamPlainNoModifyReqPreservesRequestTarget) {
   server.stop();
 }
 
+TEST(HttpClientTest, StreamPlainCanDisableResponseBodyAccumulation) {
+  KeepAliveServer server;
+  server.run_async();
+
+  cjj365::AppProperties app_properties{config_sources()};
+  auto http_client_config_provider =
+      std::make_shared<cjj365::HttpclientConfigProviderFile>(app_properties,
+                                                             config_sources());
+  cjj365::ClientSSLContext client_ssl_ctx(*http_client_config_provider);
+  auto http_client_ = std::make_unique<client_async::HttpClientManager>(
+      client_ssl_ctx, *http_client_config_provider);
+
+  std::string url =
+      fmt::format("http://127.0.0.1:{}/stream?name=test", server.port);
+  http::request<http::string_body> req{http::verb::get, "/ignored", 11};
+  req.set(http::field::host, fmt::format("127.0.0.1:{}", server.port));
+  req.set(http::field::user_agent, "stream-test-no-accumulate");
+
+  client_async::HttpClientRequestParams params;
+  params.accumulate_response_body = false;
+
+  std::string streamed_body;
+  std::optional<int> callback_code;
+  std::optional<int> status;
+  std::optional<std::string> body;
+  misc::ThreadNotifier notifier{5000};
+
+  http_client_->http_request_stream<http::string_body>(
+      urls::url_view(url), std::move(req),
+      [&](http::response<http::empty_body>&&) {},
+      [&](std::string&& chunk) { streamed_body += chunk; },
+      [&](std::optional<http::response<http::string_body>>&& res, int code) {
+        callback_code = code;
+        if (res) {
+          status = res->result_int();
+          body = res->body();
+        }
+        notifier.notify();
+      },
+      client_async::HttpClientRequestParams{params});
+
+  notifier.waitForNotification();
+
+  ASSERT_TRUE(callback_code.has_value());
+  ASSERT_EQ(*callback_code, 0);
+  ASSERT_TRUE(status.has_value());
+  ASSERT_EQ(*status, 200);
+  ASSERT_TRUE(body.has_value());
+  EXPECT_TRUE(body->empty());
+  EXPECT_EQ(streamed_body, "ok");
+
+  http_client_->stop();
+  server.stop();
+}
+
 TEST(HttpClientTest, StreamPathDoesNotFollowRedirects) {
   KeepAliveServer server;
   server.run_async();

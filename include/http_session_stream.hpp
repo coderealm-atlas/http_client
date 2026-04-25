@@ -94,7 +94,10 @@ class session_stream_ssl
 
   void do_read() {
     parser_.emplace();
-    parser_->body_limit(static_cast<std::uint64_t>(1024) * 1024 * 64);
+    parser_->body_limit(this->accumulate_response_body()
+                            ? boost::optional<std::uint64_t>(
+                                  static_cast<std::uint64_t>(1024) * 1024 * 64)
+                            : boost::none);
     this->read_buffer().consume(this->read_buffer().size());
     read_some_loop();
   }
@@ -129,6 +132,11 @@ class session_stream_ssl
           if (body.size() > self->last_body_size_ && self->on_chunk_) {
             self->on_chunk_(body.substr(self->last_body_size_));
             self->last_body_size_ = body.size();
+            if (!self->accumulate_response_body()) {
+              auto& parser_body = self->parser_->get().body();
+              typename http::string_body::value_type{}.swap(parser_body);
+              self->last_body_size_ = 0;
+            }
           }
 
           if (self->parser_->is_done()) {
@@ -184,7 +192,10 @@ class session_stream_plain
 
   void do_read() {
     parser_.emplace();
-    parser_->body_limit(static_cast<std::uint64_t>(1024) * 1024 * 64);
+    parser_->body_limit(this->accumulate_response_body()
+                            ? boost::optional<std::uint64_t>(
+                                  static_cast<std::uint64_t>(1024) * 1024 * 64)
+                            : boost::none);
     this->read_buffer().consume(this->read_buffer().size());
     read_some_loop();
   }
@@ -219,6 +230,11 @@ class session_stream_plain
           if (body.size() > self->last_body_size_ && self->on_chunk_) {
             self->on_chunk_(body.substr(self->last_body_size_));
             self->last_body_size_ = body.size();
+            if (!self->accumulate_response_body()) {
+              auto& parser_body = self->parser_->get().body();
+              typename http::string_body::value_type{}.swap(parser_body);
+              self->last_body_size_ = 0;
+            }
           }
 
           if (self->parser_->is_done()) {

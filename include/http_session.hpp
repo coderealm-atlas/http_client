@@ -38,6 +38,7 @@ struct HttpClientRequestParams {
   std::optional<fs::path> body_file = std::nullopt;
   bool follow_redirect = true;
   bool no_modify_req = false;
+  bool accumulate_response_body = true;
   std::chrono::seconds timeout = std::chrono::seconds(30);
   // Split timeouts (default 30s each). These complement 'timeout'.
   std::chrono::seconds resolve_timeout = std::chrono::seconds(30);
@@ -77,6 +78,7 @@ class session {
         connect_to_(params.connect_timeout),
         handshake_to_(params.handshake_timeout),
         io_to_(params.io_timeout),
+        accumulate_response_body_(params.accumulate_response_body),
         url_(std::move(url)),
         callback_(std::move(callback)) {}
 
@@ -87,6 +89,7 @@ class session {
   std::chrono::seconds resolve_timeout() const { return resolve_to_; }
   std::chrono::seconds connect_timeout() const { return connect_to_; }
   std::chrono::seconds handshake_timeout() const { return handshake_to_; }
+  bool accumulate_response_body() const { return accumulate_response_body_; }
   boost::beast::flat_buffer& read_buffer() { return buffer_; }
 
   void deliver(response_t&& r, int code) noexcept {
@@ -446,6 +449,7 @@ class session {
   std::chrono::seconds connect_to_{30};
   std::chrono::seconds handshake_to_{30};
   std::chrono::seconds io_to_{30};
+  bool accumulate_response_body_{true};
 
  protected:
   urls::url url_;
