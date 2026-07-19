@@ -26,6 +26,7 @@
 
 namespace monad {
 
+namespace asio = boost::asio;
 namespace http = boost::beast::http;
 using cjj365::ProxySetting;
 using client_async::HttpClientManager;
@@ -517,176 +518,204 @@ ExchangeIOFor<Tag>
   });
 }
 
-// ----- Monadic Request Invoker -----
-template <typename Tag>
-auto http_request_io(HttpClientManager& pool, int verbose = 0) {
+// ----- Completion-token Request Invoker -----
+template <typename Tag, typename CompletionToken>
+auto async_http_exchange(HttpClientManager& pool, ExchangePtrFor<Tag> exchange,
+                         int verbose, CompletionToken&& token) {
   using Req = typename TagTraits<Tag>::Request;
   using Res = typename TagTraits<Tag>::Response;
   using ExchangePtr = HttpExchangePtr<Req, Res>;
 
+  return asio::async_initiate<CompletionToken,
+                              void(monad::MyResult<ExchangePtr>)>(
+      [&pool, verbose](auto&& raw_handler, ExchangePtr ex) mutable {
+        using Handler = std::decay_t<decltype(raw_handler)>;
+        auto handler = std::make_shared<Handler>(
+            std::forward<decltype(raw_handler)>(raw_handler));
+        auto trim = [](std::string_view s) {
+          while (!s.empty() && (s.front() == ' ' || s.front() == '\t' ||
+                                s.front() == '\n' || s.front() == '\r')) {
+            s.remove_prefix(1);
+          }
+          while (!s.empty() && (s.back() == ' ' || s.back() == '\t' ||
+                                s.back() == '\n' || s.back() == '\r')) {
+            s.remove_suffix(1);
+          }
+          return s;
+        };
+
+        auto to_lower = [](std::string_view s) {
+          std::string out{s};
+          std::transform(out.begin(), out.end(), out.begin(),
+                         [](unsigned char c) {
+                           return static_cast<char>(std::tolower(c));
+                         });
+          return out;
+        };
+
+        auto should_bypass_env_proxy_for_url = [&](const urls::url& url) {
+          const char* no_proxy_c = std::getenv("NO_PROXY");
+          if (!no_proxy_c || !*no_proxy_c) {
+            no_proxy_c = std::getenv("no_proxy");
+          }
+          if (!no_proxy_c || !*no_proxy_c) {
+            return false;
+          }
+
+          auto host_sv = url.host();
+          if (host_sv.empty()) {
+            return false;
+          }
+
+          const std::string host_lc = to_lower(host_sv);
+          std::string_view list{no_proxy_c};
+          while (!list.empty()) {
+            auto comma = list.find(',');
+            auto token =
+                comma == std::string_view::npos ? list : list.substr(0, comma);
+            token = trim(token);
+
+            if (!token.empty()) {
+              if (token == "*") {
+                return true;
+              }
+
+              // Strip optional port in token (best-effort; minimal support).
+              // Examples: "example.com:8080" -> "example.com"
+              if (auto pos = token.rfind(':'); pos != std::string_view::npos) {
+                auto port_part = token.substr(pos + 1);
+                bool all_digits = !port_part.empty();
+                for (char c : port_part) {
+                  if (c < '0' || c > '9') {
+                    all_digits = false;
+                    break;
+                  }
+                }
+                if (all_digits) {
+                  token = token.substr(0, pos);
+                  token = trim(token);
+                }
+              }
+
+              const std::string token_lc = to_lower(token);
+              if (token_lc.empty()) {
+                // continue
+              } else if (host_lc == token_lc) {
+                return true;
+              } else {
+                // Suffix match:
+                // - token ".example.com" matches "a.example.com" (but not
+                // "example.com")
+                // - token "example.com" matches "example.com" and
+                // "a.example.com"
+                std::string_view suffix = token_lc;
+                bool require_dot = false;
+                if (!suffix.empty() && suffix.front() == '.') {
+                  suffix.remove_prefix(1);
+                  require_dot = true;
+                }
+
+                if (!suffix.empty() && host_lc.size() > suffix.size() &&
+                    host_lc.compare(host_lc.size() - suffix.size(),
+                                    suffix.size(), suffix) == 0) {
+                  const auto dot_pos = host_lc.size() - suffix.size();
+                  if (!require_dot ||
+                      (dot_pos > 0 && host_lc[dot_pos - 1] == '.')) {
+                    return true;
+                  }
+                }
+              }
+            }
+
+            if (comma == std::string_view::npos) {
+              break;
+            }
+            list.remove_prefix(comma + 1);
+          }
+          return false;
+        };
+
+        HttpClientRequestParams request_params;
+        request_params.body_file = ex->body_file;
+        request_params.follow_redirect = ex->follow_redirect;
+        request_params.no_modify_req = ex->no_modify_req;
+        request_params.timeout = ex->timeout;
+        // Keep split timeouts aligned with the caller's requested timeout.
+        // Otherwise http_session defaults each operation timeout to 30s and can
+        // cancel long-running upstream reads even when `timeout` is larger.
+        request_params.resolve_timeout = ex->timeout;
+        request_params.connect_timeout = ex->timeout;
+        request_params.handshake_timeout = ex->timeout;
+        request_params.io_timeout = ex->timeout;
+
+        if (!ex->proxy && !ex->no_proxy_pool && pool.has_proxy_pool()) {
+          ex->proxy = pool.borrow_proxy();
+        }
+
+        // If proxy is inherited from env, honor NO_PROXY for this request.
+        if (ex->proxy && ex->proxy->from_env &&
+            should_bypass_env_proxy_for_url(ex->url)) {
+          ex->proxy.reset();
+        }
+
+        auto req = ex->request;
+        if (!ex->no_modify_req) {
+          req.set(http::field::user_agent, BOOST_BEAST_VERSION_STRING);
+          std::string target = ex->url.encoded_path().empty()
+                                   ? "/"
+                                   : std::string(ex->url.encoded_path());
+          if (!ex->url.encoded_query().empty()) {
+            target = fmt::format("{}?{}", target,
+                                 std::string(ex->url.encoded_query()));
+          }
+          req.target(target);
+        }
+
+        if (verbose > 4) {  // trace
+          std::cerr << "Before request headers: " << req.base() << std::endl;
+        }
+
+        auto completion_executor =
+            asio::get_associated_executor(*handler, pool.get_executor());
+        auto cancellation_slot =
+            asio::get_associated_cancellation_slot(*handler);
+        auto complete = [handler = std::move(handler), ex](
+                            std::optional<Res> resp, int err) mutable {
+          if (err == 0 && resp.has_value()) {
+            ex->response = std::move(resp);
+            (*handler)(monad::MyResult<ExchangePtr>::Ok(std::move(ex)));
+            return;
+          }
+
+          const auto url_view = ex->url.buffer();
+          BOOST_LOG_SEV(ex->lg, trivial::error)
+              << "http_request_io failed with error num: " << err
+              << ", url:  " << url_view;
+          (*handler)(monad::MyResult<ExchangePtr>::Err(monad::Error{
+              err, fmt::format("http_request_io failed, url: {}", url_view)}));
+        };
+        auto bound_completion = asio::bind_executor(
+            completion_executor, asio::bind_cancellation_slot(
+                                     cancellation_slot, std::move(complete)));
+
+        pool.async_http_request<typename Req::body_type,
+                                typename Res::body_type>(
+            ex->url, std::move(req), HttpClientRequestParams{request_params},
+            std::move(bound_completion), ex->proxy.get());
+      },
+      token, std::move(exchange));
+}
+
+// ----- Monadic compatibility wrapper -----
+template <typename Tag>
+auto http_request_io(HttpClientManager& pool, int verbose = 0) {
+  using ExchangePtr = ExchangePtrFor<Tag>;
+
   return [&pool, verbose](ExchangePtr ex) {
-    return monad::IO<ExchangePtr>([&pool, verbose,
-                                   ex = std::move(ex)](auto cb) mutable {
-      auto trim = [](std::string_view s) {
-        while (!s.empty() && (s.front() == ' ' || s.front() == '\t' ||
-                              s.front() == '\n' || s.front() == '\r')) {
-          s.remove_prefix(1);
-        }
-        while (!s.empty() && (s.back() == ' ' || s.back() == '\t' ||
-                              s.back() == '\n' || s.back() == '\r')) {
-          s.remove_suffix(1);
-        }
-        return s;
-      };
-
-      auto to_lower = [](std::string_view s) {
-        std::string out{s};
-        std::transform(
-            out.begin(), out.end(), out.begin(),
-            [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
-        return out;
-      };
-
-      auto should_bypass_env_proxy_for_url = [&](const urls::url& url) {
-        const char* no_proxy_c = std::getenv("NO_PROXY");
-        if (!no_proxy_c || !*no_proxy_c) {
-          no_proxy_c = std::getenv("no_proxy");
-        }
-        if (!no_proxy_c || !*no_proxy_c) {
-          return false;
-        }
-
-        auto host_sv = url.host();
-        if (host_sv.empty()) {
-          return false;
-        }
-
-        const std::string host_lc = to_lower(host_sv);
-        std::string_view list{no_proxy_c};
-        while (!list.empty()) {
-          auto comma = list.find(',');
-          auto token =
-              comma == std::string_view::npos ? list : list.substr(0, comma);
-          token = trim(token);
-
-          if (!token.empty()) {
-            if (token == "*") {
-              return true;
-            }
-
-            // Strip optional port in token (best-effort; minimal support).
-            // Examples: "example.com:8080" -> "example.com"
-            if (auto pos = token.rfind(':'); pos != std::string_view::npos) {
-              auto port_part = token.substr(pos + 1);
-              bool all_digits = !port_part.empty();
-              for (char c : port_part) {
-                if (c < '0' || c > '9') {
-                  all_digits = false;
-                  break;
-                }
-              }
-              if (all_digits) {
-                token = token.substr(0, pos);
-                token = trim(token);
-              }
-            }
-
-            const std::string token_lc = to_lower(token);
-            if (token_lc.empty()) {
-              // continue
-            } else if (host_lc == token_lc) {
-              return true;
-            } else {
-              // Suffix match:
-              // - token ".example.com" matches "a.example.com" (but not
-              // "example.com")
-              // - token "example.com" matches "example.com" and "a.example.com"
-              std::string_view suffix = token_lc;
-              bool require_dot = false;
-              if (!suffix.empty() && suffix.front() == '.') {
-                suffix.remove_prefix(1);
-                require_dot = true;
-              }
-
-              if (!suffix.empty() && host_lc.size() > suffix.size() &&
-                  host_lc.compare(host_lc.size() - suffix.size(), suffix.size(),
-                                  suffix) == 0) {
-                const auto dot_pos = host_lc.size() - suffix.size();
-                if (!require_dot ||
-                    (dot_pos > 0 && host_lc[dot_pos - 1] == '.')) {
-                  return true;
-                }
-              }
-            }
-          }
-
-          if (comma == std::string_view::npos) {
-            break;
-          }
-          list.remove_prefix(comma + 1);
-        }
-        return false;
-      };
-
-      HttpClientRequestParams request_params;
-      request_params.body_file = ex->body_file;
-      request_params.follow_redirect = ex->follow_redirect;
-      request_params.no_modify_req = ex->no_modify_req;
-      request_params.timeout = ex->timeout;
-      // Keep split timeouts aligned with the caller's requested timeout.
-      // Otherwise http_session defaults each operation timeout to 30s and can
-      // cancel long-running upstream reads even when `timeout` is larger.
-      request_params.resolve_timeout = ex->timeout;
-      request_params.connect_timeout = ex->timeout;
-      request_params.handshake_timeout = ex->timeout;
-      request_params.io_timeout = ex->timeout;
-
-      if (!ex->proxy && !ex->no_proxy_pool && pool.has_proxy_pool()) {
-        ex->proxy = pool.borrow_proxy();
-      }
-
-      // If proxy is inherited from env, honor NO_PROXY for this request.
-      if (ex->proxy && ex->proxy->from_env &&
-          should_bypass_env_proxy_for_url(ex->url)) {
-        ex->proxy.reset();
-      }
-
-      auto req = ex->request;
-      if (!ex->no_modify_req) {
-        req.set(http::field::user_agent, BOOST_BEAST_VERSION_STRING);
-        std::string target = ex->url.encoded_path().empty()
-                                 ? "/"
-                                 : std::string(ex->url.encoded_path());
-        if (!ex->url.encoded_query().empty()) {
-          target = fmt::format("{}?{}", target,
-                               std::string(ex->url.encoded_query()));
-        }
-        req.target(target);
-      }
-
-      if (verbose > 4) {  // trace
-        std::cerr << "Before request headers: " << req.base() << std::endl;
-      }
-
-      pool.http_request<typename Req::body_type, typename Res::body_type>(
-          ex->url, std::move(req),
-          [cb = std::move(cb), ex](std::optional<Res> resp, int err) mutable {
-            if (err == 0 && resp.has_value()) {
-              ex->response = std::move(resp);
-              cb(monad::Result<ExchangePtr, monad::Error>::Ok(std::move(ex)));
-              return;
-            }
-
-            const auto url_view = ex->url.buffer();
-            BOOST_LOG_SEV(ex->lg, trivial::error)
-                << "http_request_io failed with error num: " << err
-                << ", url:  " << url_view;
-            cb(monad::Result<ExchangePtr, monad::Error>::Err(monad::Error{
-                err,
-                fmt::format("http_request_io failed, url: {}", url_view)}));
-          },
-          HttpClientRequestParams{request_params}, ex->proxy.get());
-    });
+    return monad::IO<ExchangePtr>(
+        [&pool, verbose, ex = std::move(ex)](auto cb) mutable {
+          async_http_exchange<Tag>(pool, std::move(ex), verbose, std::move(cb));
+        });
   };
 }
 

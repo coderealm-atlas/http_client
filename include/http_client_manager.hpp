@@ -1,13 +1,18 @@
 #pragma once
 
+#include <atomic>
 #include <boost/asio.hpp>
 #include <boost/system/result.hpp>
 #include <chrono>
+#include <functional>
 #include <memory>
+#include <mutex>
 #include <optional>
 #include <string>
 #include <string_view>
+#include <thread>
 #include <utility>
+#include <vector>
 
 #include "beast_connection_pool.hpp"
 #include "client_ssl_ctx.hpp"
@@ -20,6 +25,54 @@
 namespace asio = boost::asio;
 
 namespace client_async {
+
+class HttpRequestCancellation {
+ public:
+  void cancel() {
+    std::function<void()> action;
+    {
+      std::lock_guard lock(mutex_);
+      if (completed_ || cancelled_) {
+        return;
+      }
+      cancelled_ = true;
+      action = cancel_action_;
+    }
+    if (action) {
+      action();
+    }
+  }
+
+ private:
+  friend class HttpClientManager;
+
+  void set_cancel_action(std::function<void()> action) {
+    bool cancel_now = false;
+    {
+      std::lock_guard lock(mutex_);
+      if (completed_) {
+        return;
+      }
+      cancel_action_ = std::move(action);
+      cancel_now = cancelled_;
+      action = cancel_action_;
+    }
+    if (cancel_now && action) {
+      action();
+    }
+  }
+
+  void complete() {
+    std::lock_guard lock(mutex_);
+    completed_ = true;
+    cancel_action_ = {};
+  }
+
+  std::mutex mutex_;
+  std::function<void()> cancel_action_;
+  bool cancelled_{false};
+  bool completed_{false};
+};
 
 class HttpClientManager {
  private:
@@ -61,6 +114,7 @@ class HttpClientManager {
   ~HttpClientManager() { stop(); }
 
   asio::io_context& ioc_ref() { return *ioc; }
+  asio::any_io_executor get_executor() noexcept { return ioc->get_executor(); }
 
   void stop() {
     if (stopped_.exchange(true)) return;  // already stopped
@@ -220,15 +274,15 @@ class HttpClientManager {
       const urls::url_view& url_input,
       http::request<RequestBody, http::basic_fields<std::allocator<char>>>&&
           req,
-      std::function<void(http::response<
-                         http::empty_body,
-                         http::basic_fields<std::allocator<char>>>&&)>
+      std::function<
+          void(http::response<http::empty_body,
+                              http::basic_fields<std::allocator<char>>>&&)>
           on_headers,
       std::function<void(std::string&&)> on_chunk,
-      std::function<void(std::optional<http::response<
-                           http::string_body,
-                           http::basic_fields<std::allocator<char>>>>&&,
-                         int)>&& callback,
+      std::function<void(
+          std::optional<http::response<
+              http::string_body, http::basic_fields<std::allocator<char>>>>&&,
+          int)>&& callback,
       HttpClientRequestParams&& params = {},
       const cjj365::ProxySetting* proxy_setting = nullptr) {
     if (params.follow_redirect) {
@@ -240,20 +294,20 @@ class HttpClientManager {
       update_request_target_for_url(req, url);
     }
     if (url.scheme() == "https") {
-      auto session =
-          std::make_shared<session_stream_ssl<RequestBody, std::allocator<char>>>(
-              *(this->ioc), this->client_ssl_ctx.context(), std::move(url),
-              HttpClientRequestParams{std::move(params)}, std::move(callback),
-              std::move(on_headers), std::move(on_chunk), proxy_setting);
+      auto session = std::make_shared<
+          session_stream_ssl<RequestBody, std::allocator<char>>>(
+          *(this->ioc), this->client_ssl_ctx.context(), std::move(url),
+          HttpClientRequestParams{std::move(params)}, std::move(callback),
+          std::move(on_headers), std::move(on_chunk), proxy_setting);
       session->set_req(std::move(req));
       session->run();
       return;
     }
-    auto session =
-        std::make_shared<session_stream_plain<RequestBody, std::allocator<char>>>(
-            *(this->ioc), std::move(url),
-            HttpClientRequestParams{std::move(params)}, std::move(callback),
-            std::move(on_headers), std::move(on_chunk), proxy_setting);
+    auto session = std::make_shared<
+        session_stream_plain<RequestBody, std::allocator<char>>>(
+        *(this->ioc), std::move(url),
+        HttpClientRequestParams{std::move(params)}, std::move(callback),
+        std::move(on_headers), std::move(on_chunk), proxy_setting);
     session->set_req(std::move(req));
     session->run();
   }
@@ -269,7 +323,8 @@ class HttpClientManager {
                    ResponseBody, http::basic_fields<std::allocator<char>>>>&&,
                int)>&& callback,
       HttpClientRequestParams&& params = {},
-      const cjj365::ProxySetting* proxy_setting = nullptr) {
+      const cjj365::ProxySetting* proxy_setting = nullptr,
+      std::shared_ptr<HttpRequestCancellation> cancellation = {}) {
     struct RedirectState {
       urls::url url;
       http::request<RequestBody, http::basic_fields<std::allocator<char>>>
@@ -283,6 +338,7 @@ class HttpClientManager {
               ResponseBody, http::basic_fields<std::allocator<char>>>>&&,
           int)>
           user_cb;
+      std::shared_ptr<HttpRequestCancellation> cancellation;
     };
 
     auto st = std::make_shared<RedirectState>();
@@ -293,6 +349,7 @@ class HttpClientManager {
     st->redirects_left = 5;
     st->step = nullptr;
     st->user_cb = std::move(callback);
+    st->cancellation = std::move(cancellation);
 
     auto step = std::make_shared<std::function<void()>>();
     st->step = step;
@@ -313,6 +370,9 @@ class HttpClientManager {
                int ec) mutable {
             if (ec != 0 || !resp.has_value() || !st->params.follow_redirect ||
                 st->redirects_left <= 0) {
+              if (st->cancellation) {
+                st->cancellation->complete();
+              }
               st->user_cb(std::move(resp), ec);
               return;
             }
@@ -321,18 +381,27 @@ class HttpClientManager {
             // semantics.
             if (st->req_template.method() != http::verb::get &&
                 st->req_template.method() != http::verb::head) {
+              if (st->cancellation) {
+                st->cancellation->complete();
+              }
               st->user_cb(std::move(resp), ec);
               return;
             }
 
             int status = resp->result_int();
             if (!is_redirect_status(status)) {
+              if (st->cancellation) {
+                st->cancellation->complete();
+              }
               st->user_cb(std::move(resp), ec);
               return;
             }
 
             auto it = resp->find(http::field::location);
             if (it == resp->end()) {
+              if (st->cancellation) {
+                st->cancellation->complete();
+              }
               st->user_cb(std::move(resp), ec);
               return;
             }
@@ -340,6 +409,9 @@ class HttpClientManager {
             auto next =
                 resolve_redirect_url(st->url, std::string_view(it->value()));
             if (!next.has_value()) {
+              if (st->cancellation) {
+                st->cancellation->complete();
+              }
               st->user_cb(std::move(resp), ec);
               return;
             }
@@ -358,6 +430,14 @@ class HttpClientManager {
             *(this->ioc), this->client_ssl_ctx.context(), std::move(url_local),
             HttpClientRequestParams{st->params}, std::move(cb),
             st->proxy_setting);
+        if (st->cancellation) {
+          st->cancellation->set_cancel_action(
+              [weak = std::weak_ptr{session}]() {
+                if (auto current = weak.lock()) {
+                  current->cancel();
+                }
+              });
+        }
         session->set_req(std::move(req_one));
         session->run();
       } else {
@@ -366,12 +446,78 @@ class HttpClientManager {
             *(this->ioc), std::move(url_local),
             HttpClientRequestParams{st->params}, std::move(cb),
             st->proxy_setting);
+        if (st->cancellation) {
+          st->cancellation->set_cancel_action(
+              [weak = std::weak_ptr{session}]() {
+                if (auto current = weak.lock()) {
+                  current->cancel();
+                }
+              });
+        }
         session->set_req(std::move(req_one));
         session->run();
       }
     };
 
     (*step)();
+  }
+
+  template <class RequestBody, class ResponseBody, class CompletionToken>
+  auto async_http_request(
+      const urls::url_view& url_input,
+      http::request<RequestBody, http::basic_fields<std::allocator<char>>>&&
+          req,
+      HttpClientRequestParams params, CompletionToken&& token,
+      const cjj365::ProxySetting* proxy_setting = nullptr) {
+    using response_t = std::optional<
+        http::response<ResponseBody, http::basic_fields<std::allocator<char>>>>;
+
+    return asio::async_initiate<CompletionToken, void(response_t, int)>(
+        [this](
+            auto&& raw_handler, urls::url url,
+            http::request<RequestBody, http::basic_fields<std::allocator<char>>>
+                request,
+            HttpClientRequestParams request_params,
+            const cjj365::ProxySetting* proxy) mutable {
+          using Handler = std::decay_t<decltype(raw_handler)>;
+          auto handler = std::make_shared<Handler>(
+              std::forward<decltype(raw_handler)>(raw_handler));
+          auto completion_executor =
+              asio::get_associated_executor(*handler, get_executor());
+          auto completion_work = std::make_shared<
+              asio::executor_work_guard<decltype(completion_executor)>>(
+              completion_executor);
+          auto cancellation = std::make_shared<HttpRequestCancellation>();
+          auto slot = asio::get_associated_cancellation_slot(*handler);
+          if (slot.is_connected()) {
+            slot.assign([weak = std::weak_ptr{cancellation}](
+                            asio::cancellation_type type) {
+              if (type != asio::cancellation_type::none) {
+                if (auto state = weak.lock()) {
+                  state->cancel();
+                }
+              }
+            });
+          }
+
+          http_request<RequestBody, ResponseBody>(
+              url, std::move(request),
+              [handler = std::move(handler), completion_executor,
+               completion_work = std::move(completion_work)](
+                  response_t response, int error) mutable {
+                asio::dispatch(
+                    completion_executor,
+                    [handler = std::move(handler),
+                     completion_work = std::move(completion_work),
+                     response = std::move(response), error]() mutable {
+                      (*handler)(std::move(response), error);
+                      completion_work->reset();
+                    });
+              },
+              std::move(request_params), proxy, std::move(cancellation));
+        },
+        token, urls::url(url_input), std::move(req), std::move(params),
+        proxy_setting);
   }
 
   // New: pooled variant (keeps existing APIs intact)

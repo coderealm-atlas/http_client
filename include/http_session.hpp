@@ -1,5 +1,8 @@
 #pragma once
 
+#include <fmt/format.h>
+
+#include <atomic>
 #include <boost/asio.hpp>      // IWYU pragma: keep
 #include <boost/asio/ssl.hpp>  // IWYU pragma: keep
 #include <boost/beast.hpp>
@@ -14,7 +17,6 @@
 #include <boost/url.hpp>
 #include <chrono>
 #include <filesystem>
-#include <fmt/format.h>
 #include <optional>
 
 #include "base64.h"
@@ -33,6 +35,9 @@ namespace logsrc = boost::log::sources;
 using tcp = asio::ip::tcp;
 
 namespace client_async {
+
+inline constexpr int kHttpRequestCancelled =
+    static_cast<int>(asio::error::operation_aborted);
 
 struct HttpClientRequestParams {
   std::optional<fs::path> body_file = std::nullopt;
@@ -93,6 +98,9 @@ class session {
   boost::beast::flat_buffer& read_buffer() { return buffer_; }
 
   void deliver(response_t&& r, int code) noexcept {
+    if (delivered_.exchange(true)) {
+      return;
+    }
     try {
       callback_(std::move(r), code);
     } catch (...) {
@@ -101,8 +109,25 @@ class session {
   }
 
  public:
+  void cancel() {
+    auto self = derived().shared_from_this();
+    asio::dispatch(executor(), [self = std::move(self)]() mutable {
+      if (self->delivered_.load()) {
+        return;
+      }
+      boost::system::error_code ignored;
+      self->resolve_timer_.cancel();
+      self->resolver_.cancel();
+      if (self->proxy_stream_) {
+        self->proxy_stream_->socket().cancel(ignored);
+        self->proxy_stream_->socket().close(ignored);
+      }
+      self->cancel_stream();
+      self->deliver(std::nullopt, kHttpRequestCancelled);
+    });
+  }
+
   // Start the asynchronous operation
- public:
   void run() {
     auto bracket_ipv6 = [](std::string_view host) -> std::string {
       // url.host() yields the host without brackets. HTTP Host header and
@@ -235,20 +260,19 @@ class session {
     }
 
     proxy_stream_->expires_after(this->op_timeout());
+    BOOST_LOG_SEV(lg, trivial::debug) << "proxy connect via: " << proxy_desc();
     BOOST_LOG_SEV(lg, trivial::debug)
-    << "proxy connect via: " << proxy_desc();
-  BOOST_LOG_SEV(lg, trivial::debug)
         << "proxy request: " << proxy_req_.value();
     http::async_write(
         proxy_stream_.value(), proxy_req_.value(),
         [self = derived().shared_from_this()](boost::beast::error_code ec,
                                               std::size_t bytes_transferred) {
           BOOST_LOG_SEV(self->lg, trivial::debug)
-        << "proxy request done, bytes transferred: " << bytes_transferred
-        << ", proxy="
-        << (self->proxy_setting_ ? (self->proxy_setting_->host + ":" +
-                       self->proxy_setting_->port)
-                     : std::string{"<null>"});
+              << "proxy request done, bytes transferred: " << bytes_transferred
+              << ", proxy="
+              << (self->proxy_setting_ ? (self->proxy_setting_->host + ":" +
+                                          self->proxy_setting_->port)
+                                       : std::string{"<null>"});
           if (ec) {
             BOOST_LOG_SEV(self->lg, trivial::error)
                 << "write to proxy server: " << ec.message();
@@ -269,7 +293,7 @@ class session {
           BOOST_LOG_SEV(self->lg, trivial::debug)
               << "proxy response via "
               << (self->proxy_setting_ ? (self->proxy_setting_->host + ":" +
-                                             self->proxy_setting_->port)
+                                          self->proxy_setting_->port)
                                        : std::string{"<null>"})
               << ": " << self->proxy_response_parser_->get();
           if (ec) {
@@ -282,7 +306,7 @@ class session {
               BOOST_LOG_SEV(self->lg, trivial::error)
                   << "proxy response via "
                   << (self->proxy_setting_ ? (self->proxy_setting_->host + ":" +
-                                                 self->proxy_setting_->port)
+                                              self->proxy_setting_->port)
                                            : std::string{"<null>"})
                   << ": " << self->proxy_response_parser_->get().result_int();
               self->deliver(std::nullopt, 4);
@@ -454,6 +478,7 @@ class session {
  protected:
   urls::url url_;
   callback_t callback_;
+  std::atomic<bool> delivered_{false};
   logsrc::severity_logger<trivial::severity_level> lg;
 };
 
@@ -485,6 +510,16 @@ class session_ssl
         stream_(std::make_unique<ssl::stream<beast::tcp_stream>>(ioc, ctx)) {}
 
   ssl::stream<boost::beast::tcp_stream>& stream() { return *stream_; }
+
+  void cancel_stream() {
+    auto self = this->shared_from_this();
+    asio::dispatch(stream_->get_executor(), [self = std::move(self)]() {
+      boost::system::error_code ignored;
+      auto& socket = beast::get_lowest_layer(*self->stream_).socket();
+      socket.cancel(ignored);
+      socket.close(ignored);
+    });
+  }
 
   void replace_stream(boost::beast::tcp_stream&& stream) {
     stream_ = std::make_unique<ssl::stream<beast::tcp_stream>>(
@@ -598,6 +633,15 @@ class session_plain
 
   void after_connect() { this->do_request(); }
   beast::tcp_stream& stream() { return *stream_; }
+
+  void cancel_stream() {
+    auto self = this->shared_from_this();
+    asio::dispatch(stream_->get_executor(), [self = std::move(self)]() {
+      boost::system::error_code ignored;
+      self->stream_->socket().cancel(ignored);
+      self->stream_->socket().close(ignored);
+    });
+  }
 
   void replace_stream(beast::tcp_stream&& stream) {
     stream_ = std::make_unique<beast::tcp_stream>(std::move(stream));
