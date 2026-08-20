@@ -39,11 +39,14 @@ auto bind_shared_factory() {
 template <typename Interface, typename Impl>
 auto bind_shared_factory() {
   return boost::di::make_injector(
-      // boost::di::bind<Impl>().in(boost::di::unique),
       boost::di::bind<Interface>().template to<Impl>().in(boost::di::unique),
       boost::di::bind<typename Interface::Factory>().to([](const auto& inj) {
         return [&inj]() {
-          return inj.template create<std::shared_ptr<Interface>>();
+          // Construct the concrete shared_ptr before erasing its type. Creating
+          // shared_ptr<Interface> directly can leave
+          // enable_shared_from_this<Impl> uninitialized in Boost.DI.
+          return std::static_pointer_cast<Interface>(
+              inj.template create<std::shared_ptr<Impl>>());
         };
       }));
 }
